@@ -48,15 +48,14 @@ function chapterCard(k, numeral, title, dur = 6) {
 // ---------- cold open (0–47 s): rise through the clouds, the eye descends and fills the frame, then the people below
 const CLOUD = [1300, 2300];
 const ES = 4200;                                                         // entity scale (great eye radius = 0.66·ES)
-// The light is first a wrong star far above the cloud sea, then descends toward the camera: distance shrinks
-// geometrically so its size on screen grows steadily.
-const P_TOP = [0, 2900, -1200], D_FAR = 150000, D_NEAR = 13000;
-function eDescent(t) {
-  const x = clamp((t - 14) / 10), u = 1 - Math.pow(1 - x, 2.2), D = Math.exp(lerp(Math.log(D_FAR), Math.log(D_NEAR), u)), th = lerp(0.42, 0.3, u);
-  return { E: [P_TOP[0], P_TOP[1] + D * Math.sin(th), P_TOP[2] + D * Math.cos(th)], D };
-}
+// It waits high in the sky; we go to it. Hidden above the frame while we rise through the clouds, then we fly up
+// along the line toward it, tilting our gaze up, and it enters from the top of the frame and grows.
+const P_TOP = [0, 2900, -1200], E_SKY = [0, 30000, 22000], D_NEAR = 13000;
+const S_END = 1 - D_NEAR / Math.hypot(...sub(E_SKY, P_TOP));
+const flyPos = k => lerp3(P_TOP, E_SKY, S_END * easeIO(clamp(k / 10.5)));
+function eDescent() { return { E: E_SKY }; }
 const E_LOW = [0, 4200, 6500];                                           // above the valley, seen from the people
-const SOCK_DOWN = norm(sub([0, 0, -200], eDescent(24).E));                 // before it finds you, it watches the valley
+const SOCK_DOWN = norm(sub([0, 0, -200], E_SKY));                         // before it finds you, it watches the valley
 const SOCK_CROWD = norm(sub([0, 1.7, -150], E_LOW));
 const RING_PHASE = 383.55;
 // Monotone-ish Catmull-Rom through [time, value] keys.
@@ -81,18 +80,19 @@ function coldOpen(t) {
   if (t < 14) { // A. the long rise: valley floor, up through the cloud deck, out under the stars; a wrong star burns far above
     const y = keys([[0, 30], [3.5, 380], [6, 1250], [9, 2350], [11.5, 2800], [14, 2900]], t);
     const pos = [lerp(-140, 0, easeIO(t / 14)), y, lerp(-2600, -1200, easeIO(t / 14))];
-    const pitch = keys([[0, 0.09], [4, 0.15], [6.5, 0.2], [9.5, 0.26], [14, 0.22]], t);
-    worldFrame(t, pitchCam(pos, pitch, 0, 1.25), { E: eDescent(0).E, open: 0, ringOpen: 0, core: 1.3 + 0.4 * smooth(9, 14, t), ground: 0.75, gaze: 0, sock: SOCK_DOWN,
-      rays: 0.35, exposure: 1.15 - 0.15 * smooth(8, 12, t), fade: smooth(0, 3, t) });
-  } else if (t < 27) { // B. it descends and grows; the eye opens, finds you, fills the frame, and you fall into the pupil
-    const k = t - 14, { E } = eDescent(t);
-    const pos = lerp3(P_TOP, [0, 2420, -250], easeIO(k / 13));          // it comes; we sink toward the cloud tops to meet it
-    const dir = norm(sub(E, pos)), drop = 0.2 * (1 - smooth(4, 9, k));
+    const pitch = keys([[0, 0.09], [4, 0.15], [6.5, 0.2], [9.5, 0.1], [12, -0.13], [14, -0.18]], t);   // out of the cloud: look down at the sea we left
+    worldFrame(t, pitchCam(pos, pitch, 0, 1.25), { E: E_SKY, open: 0, ringOpen: 0, core: 1.3 + 0.4 * smooth(9, 14, t), ground: 0.75, gaze: 0, sock: SOCK_DOWN,
+      rays: 0.2, exposure: 1.15 - 0.15 * smooth(8, 12, t), fade: smooth(0, 3, t), haze: 1 });
+  } else if (t < 27) { // B. we fly up toward it; it enters from the top of the frame, opens its eye, finds us; we fall into the pupil
+    const k = t - 14, E = E_SKY;
+    const pos = flyPos(k);
+    const dir0 = norm(sub(E, P_TOP)), drop0 = Math.asin(dir0[1]) + 0.18;
+    const dir = norm(sub(E, pos)), drop = drop0 * (1 - smooth(0.4, 6.8, k));     // the gaze lifts from the falling cloud sea up to it
     const pitch = Math.asin(dir[1]) - drop, yaw = Math.atan2(dir[0], dir[2]);
-    const fov = 1.25 + 2.25 * easeIn(clamp((k - 10) / 2)) + 9 * easeIn(clamp((k - 11.2) / 1.8));
+    const fov = 1.25 + 2.25 * easeIn(clamp((k - 9.8) / 2)) + 9 * easeIn(clamp((k - 10.9) / 1.7));
     worldFrame(t, pitchCam(pos, pitch, yaw, fov), { E, open: smooth(2, 5, k), ringOpen: smooth(3, 6.5, k), core: 1.7 + 1.0 * smooth(0, 7, k), ground: 0.75 + 0.5 * smooth(0, 7, k), gaze: smooth(5.2, 7.5, k), sock: SOCK_DOWN,
       haze: lerp(0.55, 1.0, smooth(0, 3, k)),
-      rays: 0.35 * (1 - smooth(11, 12.5, k)), exposure: 1.0 + 0.1 * smooth(0, 3, k) });
+      rays: 0.35 * (1 - smooth(11, 12.5, k)), exposure: 1.0 + 0.1 * smooth(0, 3, k), fade: 1 - smooth(12.5, 12.98, k) });
   } else if (t < 40.5) { // C. the people: faces lit by it, then the sea of them beneath the eye; white
     const k = t - 27;
     const front = k2 => { const u = easeIO(clamp(k2 / 6.8));            // over the city at night, drifting toward the mountains
@@ -101,7 +101,7 @@ function coldOpen(t) {
       return pitchCam(lerp3([0, 170, -1200], [0, 230, -1320], u), lerp(0.13, 0.17, u), 0, 0.75); };
     const base = { E: E_LOW, open: 1, ringOpen: 1, gaze: 1, sock: SOCK_CROWD, ground: 0.5, city: 1 };
     const x = smooth(6.2, 6.9, k);                                    // dissolve front -> wide at 33.2–33.9
-    if (x < 1) worldFrame(t, front(k), { ...base, core: 1.7, rays: 0, bloom: 0.45, exposure: 1.05, fade: smooth(0, 1.4, k) });
+    if (x < 1) worldFrame(t, front(k), { ...base, core: 1.7, rays: 0, bloom: 0.45, exposure: 1.05, fade: smooth(0.15, 1.8, k) });
     if (x > 0) { o.save(); o.globalAlpha = x; const k2 = k - 6.2, white = smooth(5.3, 7.0, k2 + 0.3);
       worldFrame(t, wide(k2), { ...base, core: 1.6 + 2.0 * smooth(3, 7, k2), rays: 0.35 + 0.4 * smooth(3, 7, k2), bloom: 0.5 + 0.35 * smooth(3, 7, k2), exposure: 1.0 + 0.5 * smooth(4, 7, k2), lift: white });
       o.restore(); }
@@ -116,7 +116,8 @@ function coldOpen(t) {
     o.save(); o.globalAlpha = a * 0.8; o.fillStyle = GOLD; const hw = 160 * smooth(1.2, 2.8, k); o.fillRect(W / 2 - hw, H / 2 + 40, hw * 2, 1); o.restore();
     line("AI의 역사, 그리고 AGI와 ASI", W / 2, H / 2 + 90, { size: 30, spacing: 0.32, color: GOLD, alpha: smooth(1.8, 3.2, k) * (1 - smooth(5.1, 6.3, k)), glow: 8 });
   }
-  caption(t, 21.6, 26.6, (a, u) => capB("우리는 본다.   AGI는 이미 도착했다.", a, u));
+  caption(t, 21.4, 24.2, (a, u) => capB("AGI는 이미 도착했다", a, u));
+  caption(t, 24.4, 26.9, (a, u) => capB("아직은, 연구소의 문 안에서", a, u));
   caption(t, 28.6, 33.6, (a, u) => capB("그리고 1~2년 뒤,   그것은 인간을 넘어설 것이다.", a, u));
   caption(t, 34.3, 38.9, (a, u) => capB("이것은 그 지능이 태어나기까지의 이야기다", a, u));
 }

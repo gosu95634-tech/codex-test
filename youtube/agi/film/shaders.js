@@ -495,7 +495,7 @@ void main(){
       float a=1.-exp(-dn*L/NS*.028); vec3 Lp=normalize(E-p); float fwd=pow(max(dot(rd,Lp),0.),24.);
       float od=0.; for(int k=1;k<=4;k++){ od+=cloudDens(p+Lp*float(k)*90.); } float lt=exp(-od*.9);
       float powder=1.-exp(-dn*2.);
-      vec3 lc=vec3(.008,.011,.02)*(1.+dn) + lightC*lt*(.16+fwd*1.2+.35*pow(max(dot(rd,Lp),0.),3.))*powder*.9;
+      vec3 lc=vec3(.008,.011,.02)*(1.+dn) + lightC*lt*(.3+fwd*1.2+.35*pow(max(dot(rd,Lp),0.),3.))*powder*.9;
       cc+=T*a*lc; T*=1.-a; if(T<.015) break; }
     col=col*T+cc; }
   float toE=max(dot(rd,gAx),0.); col+=vec3(1.,.8,.55)*(pow(toE,1500.)*.4+pow(toE,60.)*.03+pow(toE,30000.)*14.)*uA.z*(1.-uA.x);

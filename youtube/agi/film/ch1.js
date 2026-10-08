@@ -616,7 +616,7 @@ chapter("ch1", 66, (k, T) => {
   else if (k >= 54.2) { sceneThree(k, T); if (k < 55.2) { o.save(); o.globalAlpha = 1 - smooth(54.2, 55.2, k); o.fillStyle = "#fff8ec"; o.fillRect(0, BAR, W, H - 2 * BAR); o.restore(); } }
   if (k >= 34.2 && k < 54.2) { sceneStairs(k, T); if (k < 34.9) { o.save(); o.globalAlpha = 1 - smooth(34.2, 34.9, k); o.fillStyle = "#fff8ec"; o.fillRect(0, BAR, W, H - 2 * BAR); o.restore(); } }
   chapterCard(k, "I", "세 개의 단어");
-  caption(k, 7.0, 11.4, (a, u) => capB("좁은 AI — 한 가지만 잘하는 천재", a, u));
+  caption(k, 7.0, 11.4, (a, u) => capB("AI — 한 가지만 잘하는 천재", a, u));
   caption(k, 12.0, 17.2, (a, u) => capB("체스는 세계 최강. 하지만 커피 한 잔도 못 탄다", a, u));
   caption(k, 19.0, 23.3, (a, u) => capB("AGI — 사람이 하는 거의 모든 지적인 일을", a, u));
   caption(k, 23.6, 26.8, (a, u) => capB("사람만큼 해내는 지능", a, u));
@@ -626,8 +626,8 @@ chapter("ch1", 66, (k, T) => {
   caption(k, 45.8, 48.9, (a, u) => capB("인류 최고의 천재보다 훨씬 뛰어난 지능", a, u));
   caption(k, 49.1, 51.8, (a, u) => capB("개미가 인간을 이해할 수 없듯이", a, u));
   caption(k, 52.0, 55.2, (a, u) => capB("우리는 그것을 이해할 수 없을지도 모른다", a, u));
-  caption(k, 55.6, 59.6, (a, u) => capB("좁은 AI  →  AGI  →  ASI", a, u));
-  caption(k, 60.0, 64.8, (a, u) => capB("우리는 이미 두 번째 계단을 넘었다", a, u));
+  caption(k, 55.6, 59.6, (a, u) => capB("AI  →  AGI  →  ASI", a, u));
+  caption(k, 60.0, 64.8, (a, u) => capB("연구소 깊은 곳에서, 우리는 이미 AGI에 닿았다", a, u));
 });
 // copy of the current 2D frame (used under cross-dissolves)
 let SNAP = null;
