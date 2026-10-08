@@ -1,0 +1,78 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "SerifL"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Light.ttf); }
+@font-face { font-family: "SerifM"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Medium.ttf); }
+@font-face { font-family: "SerifB"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Bold.ttf); }
+@font-face { font-family: "SansL"; src: url(../../claude-history/assets/fonts/NotoSansKR-Light.ttf); }
+@font-face { font-family: "Corm"; src: url(../../claude-history/assets/fonts/Cormorant-Regular.ttf); }
+@font-face { font-family: "CormI"; src: url(../../claude-history/assets/fonts/Cormorant-Italic.ttf); }
+@font-face { font-family: "CormSB"; src: url(../../claude-history/assets/fonts/Cormorant-SemiBold.ttf); }
+html, body { margin: 0; background: #000; } canvas { display: block; }
+</style></head>
+<body>
+<canvas id="out" width="1920" height="1080"></canvas>
+<script src="shaders.js"></script>
+<script src="gl.js"></script>
+<script src="overlay.js"></script>
+<script>
+// ---------- look-dev frames ----------
+const CAM = (pos, at, fov = 1.5, up = [0, 1, 0]) => ({ pos, fwd: norm(sub(at, pos)), up, fov });
+const camU = c => ({ uCamPos: c.pos, uCamFwd: c.fwd, uCamUp: c.up, uFov: c.fov });
+
+function boardCells(hx, hy) { // stylised mid-game position on the right side, highlighted stone at (hx,hy)
+  const cells = new Array(361).fill(0), put = (x, y, v) => { cells[y * 19 + x] = v; };
+  const B = [[3, 3], [15, 15], [15, 3], [2, 15], [16, 13], [13, 16], [5, 2], [2, 9], [15, 9], [16, 7], [9, 15], [6, 16], [3, 13], [12, 2], [16, 10], [13, 10], [12, 8], [15, 11], [11, 12], [16, 5], [14, 6], [12, 14], [10, 9]];
+  const Wt = [[15, 2], [3, 15], [16, 15], [16, 4], [14, 13], [16, 12], [3, 5], [5, 15], [17, 9], [13, 4], [2, 12], [10, 16], [17, 6], [14, 15], [9, 2], [14, 11], [13, 8], [15, 7], [12, 11], [17, 11], [11, 6], [13, 12]];
+  B.forEach(([x, y]) => put(x, y, 0.33)); Wt.forEach(([x, y]) => put(x, y, 0.66)); put(hx, hy, 0.33);
+  return cells;
+}
+const LB = 0.128, BAR = Math.round(H * LB); // 2.39:1 letterbox; captions live in the bars
+const capBottom = (str, o2 = {}) => line(str, W / 2, H - BAR / 2, { size: 40, glow: 8, ...o2 });
+const capTop = (str, o2 = {}) => line(str, W / 2, BAR / 2, { size: 26, spacing: 0.5, color: GOLD, glow: 6, ...o2 });
+const LOOKS = {
+  entity(t) {
+    const cam = CAM([0.0, -0.95, -4.3], [0, 0.25, 0], 1.25);
+    GL.frame({ name: "entity", fs: SHADERS.entity, scale: 0.75, uniforms: { uTime: t, ...camU(cam), uA: [1, 1, 0.8, 1], uB: [t * 0.25, 0.7, 0, 0] } },
+      { bloom: 0.55, thresh: 1.3, exposure: 1.0, rays: [0.5, 0.57, 0.35], letterbox: LB, vignette: 0.55, t });
+    o.drawImage(GL.canvas, 0, 0);
+    capTop("2026");
+    capBottom("우리는 본다.  AGI는 이미 도착했다.");
+    tag("이 채널의 판단", W - 190, H - BAR / 2);
+  },
+  stairs(t) {
+    const cam = CAM([7.5, 1.4, -5.5], [0, 5.2, 9.5], 1.3);
+    const R = 0.62, RUN = 1.25, WD = 1.7;
+    GL.frame({ name: "stairs", fs: SHADERS.stairs, scale: 0.75, uniforms: { uTime: t, ...camU(cam), uA: [R, RUN, WD, 1], uB: [0.35, 0, 0, 0] } },
+      { bloom: 0.6, thresh: 1.1, exposure: 1.0, rays: [0.62, 0.08, 0.35], letterbox: LB, vignette: 0.5, t });
+    o.drawImage(GL.canvas, 0, 0);
+    const marks = [[1, 0, "개미"], [3, 0, "닭"], [6, 0, "침팬지"], [10, -0.3, "보통 사람"], [10, 0.3, "아인슈타인"]];
+    marks.forEach(([k, dz, s2], i) => { const q = project(cam, [WD, k * R + 0.06, k * RUN + dz * RUN]); if (q) label(s2, q[0] + 70 + (i === 4 ? 150 : 0), q[1] - 90 - (i === 4 ? 40 : 0), q[0], q[1], 1, 26); });
+    capTop("ASI", { font: "CormSB", size: 30 });
+    capBottom("모든 분야에서, 인류 최고의 천재보다 훨씬 뛰어난 지능");
+  },
+  board(t) {
+    const hx = 14, hy = 9, hp = [hx - 9, 0.19, hy - 9];
+    const cam = CAM([hp[0] - 3.2, 1.7, hp[2] - 4.6], [hp[0] + 0.2, 0.1, hp[2] + 0.6], 1.55);
+    const tex = GL.setBoard(boardCells(hx, hy));
+    GL.frame({ name: "board", fs: SHADERS.board, scale: 0.75, textures: { uBoard: tex }, uniforms: { uTime: t, ...camU(cam), uA: [hx, hy, 0.7, 1.3], uB: [1, 0, 0, 0] } },
+      { bloom: 0.6, thresh: 1.0, exposure: 1.05, rays: [0.55, 0.5, 0.2], letterbox: LB, vignette: 0.55, t });
+    o.drawImage(GL.canvas, 0, 0);
+    capTop("제2국  37수");
+    capBottom("인간이 둘 확률, 1만 분의 1");
+  },
+  hands(t) {
+    const cam = CAM([0, 0, 0], [0, 0, 1], 1.2);
+    GL.frame({ name: "space", fs: SHADERS.space, scale: 0.5, uniforms: { uTime: t, ...camU(cam), uA: [0.7, 0.04, 0.9, 0] } }, { bloom: 0.6, thresh: 1.0, exposure: 1.0, rays: [0.86, 0.54, 0.3], letterbox: LB, vignette: 0.6, t });
+    o.drawImage(GL.canvas, 0, 0);
+    drawHumanHand(700, 590, 1.35, t);
+    drawLightHand(1235, 520, 1.35, t);
+    flare(980, 552, 0.32, 0.85);
+    capTop("Machines of Loving Grace", { font: "CormI", size: 32, spacing: 0.1 });
+    capBottom("자비로운 은총의 기계");
+  },
+};
+window.renderLook = (k, t) => { o.clearRect(0, 0, W, H); LOOKS[k](t); grainOver(Math.floor(t * 24), 0.05); return out.toDataURL("image/jpeg", 0.95).slice(23); };
+window.ready = async () => { await Promise.all(["SerifL", "SerifM", "SerifB", "SansL", "Corm", "CormI", "CormSB"].map(f => document.fonts.load(`40px "${f}"`, "가A"))); return { fonts: [...document.fonts].filter(f => f.status === "loaded").length, hdr: GL.hdr }; };
+</script>
+</body></html>
