@@ -941,7 +941,7 @@ void main(){
   float ths=th + uA.z*rho;
   float ph=rho + uA.w - out_;
   // two layers: liquid gold filaments and slower smoke above
-  float P=18.; vec2 q=vec2(ths/6.2831853*P, ph*2.6);
+  float P=20.; vec2 q=vec2(ths/6.2831853*P, ph*2.6);                 // P/4 must stay whole or the pattern tears at the seam
   float fpA=pix*max(P/6.2831853*(1.+abs(uA.z)), 2.6)*1.2;
   float wv=fbmP(q*vec2(.25,.5)+vec2(0.,uTime*.08), P*.25, fpA*.4);
   vec2 qw=q+vec2(wv*5.,wv*1.2);

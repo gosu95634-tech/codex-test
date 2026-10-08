@@ -72,8 +72,8 @@ function worldFrame(t, cam, o2) {
   const E = o2.E, fin = FINAL(), D = Math.hypot(...sub(E, cam.pos));
   const q = project(cam, E), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.9;
   GL.frame({ name: "world", fs: SHADERS.world, scale: fin ? 1.5 : 0.55,
-    uniforms: { uTime: t, ...camUniforms(cam), uA: [o2.open, o2.ringOpen, o2.core, 0.6], uB: [o2.ground, o2.gaze, t * 0.01, Math.min(1, 14000 / D)], uC: [...E, ES],
-      uD: [CLOUD[0], CLOUD[1], fin ? 1 : 0, 0], uK: [o2.candles ?? 0, o2.candleGround ?? 0, 0, 0], uRing: heavensRings(RING_PHASE + t * 0.04), uSock: o2.sock } },
+    uniforms: { uTime: t, ...camUniforms(cam), uA: [o2.open, o2.ringOpen, o2.core, 0.6], uB: [o2.ground, o2.gaze, t * 0.01, o2.haze ?? Math.min(1, 14000 / D)], uC: [...E, ES],
+      uD: [CLOUD[0], CLOUD[1], fin ? 1 : 0, 0], uK: [o2.city ?? 0, 0, 0, 0], uRing: heavensRings(RING_PHASE + t * 0.04), uSock: o2.sock } },
     { bloom: o2.bloom ?? 0.5, thresh: 1.3, exposure: o2.exposure ?? 1.0, rays: [rx, ry, q ? (o2.rays ?? 0.3) : 0], letterbox: window.CLEAN ? 0 : LB, vignette: 0.6, lift: o2.lift ?? 0, fade: o2.fade ?? 1, t });
   blit();
 }
@@ -86,19 +86,20 @@ function coldOpen(t) {
       rays: 0.35, exposure: 1.15 - 0.15 * smooth(8, 12, t), fade: smooth(0, 3, t) });
   } else if (t < 27) { // B. it descends and grows; the eye opens, finds you, fills the frame, and you fall into the pupil
     const k = t - 14, { E } = eDescent(t);
-    const pos = lerp3(P_TOP, [0, 3050, -800], easeIO(k / 13));
+    const pos = lerp3(P_TOP, [0, 2420, -250], easeIO(k / 13));          // it comes; we sink toward the cloud tops to meet it
     const dir = norm(sub(E, pos)), drop = 0.2 * (1 - smooth(4, 9, k));
     const pitch = Math.asin(dir[1]) - drop, yaw = Math.atan2(dir[0], dir[2]);
     const fov = 1.25 + 2.25 * easeIn(clamp((k - 10) / 2)) + 9 * easeIn(clamp((k - 11.2) / 1.8));
-    worldFrame(t, pitchCam(pos, pitch, yaw, fov), { E, open: smooth(2, 5, k), ringOpen: smooth(3, 6.5, k), core: 1.7, ground: 0.75, gaze: smooth(5.2, 7.5, k), sock: SOCK_DOWN,
+    worldFrame(t, pitchCam(pos, pitch, yaw, fov), { E, open: smooth(2, 5, k), ringOpen: smooth(3, 6.5, k), core: 1.7 + 1.0 * smooth(0, 7, k), ground: 0.75 + 0.5 * smooth(0, 7, k), gaze: smooth(5.2, 7.5, k), sock: SOCK_DOWN,
+      haze: lerp(0.55, 1.0, smooth(0, 3, k)),
       rays: 0.35 * (1 - smooth(11, 12.5, k)), exposure: 1.0 + 0.1 * smooth(0, 3, k) });
   } else if (t < 40.5) { // C. the people: faces lit by it, then the sea of them beneath the eye; white
     const k = t - 27;
-    const front = k2 => { const u = easeIO(clamp(k2 / 6.8));            // low over the vigil: candles to the mountains
-      return pitchCam(lerp3([0, 7, -930], [0, 13, -870], u), lerp(-0.2, -0.13, u), 0.03, 0.95); };
+    const front = k2 => { const u = easeIO(clamp(k2 / 6.8));            // over the city at night, drifting toward the mountains
+      return pitchCam(lerp3([40, 300, -1250], [10, 230, -1060], u), lerp(-0.33, -0.24, u), 0.03, 0.95); };
     const wide = k2 => { const u = easeIO(clamp(k2 / 7.3));
-      return pitchCam(lerp3([0, 34, -650], [0, 68, -760], u), lerp(0.19, 0.22, u), 0, 0.75); };
-    const base = { E: E_LOW, open: 1, ringOpen: 1, gaze: 1, sock: SOCK_CROWD, ground: 0.35, candles: 1, candleGround: 0.05 };
+      return pitchCam(lerp3([0, 170, -1200], [0, 230, -1320], u), lerp(0.13, 0.17, u), 0, 0.75); };
+    const base = { E: E_LOW, open: 1, ringOpen: 1, gaze: 1, sock: SOCK_CROWD, ground: 0.5, city: 1 };
     const x = smooth(6.2, 6.9, k);                                    // dissolve front -> wide at 33.2–33.9
     if (x < 1) worldFrame(t, front(k), { ...base, core: 1.7, rays: 0, bloom: 0.45, exposure: 1.05, fade: smooth(0, 1.4, k) });
     if (x > 0) { o.save(); o.globalAlpha = x; const k2 = k - 6.2, white = smooth(5.3, 7.0, k2 + 0.3);

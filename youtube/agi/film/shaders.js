@@ -363,47 +363,45 @@ float person(vec3 p, out float tone, out float part){
   for(int j=0;j<2;j++) for(int i=0;i<2;i++){ float tn, pt; float di=personAt(p, b0+vec2(i,j), tn, pt); if(di<d){ d=di; tone=tn; part=pt; } }
   if(d>.35){ part=-1.; return .35; }                                // nobody here: a step bound, not a surface
   return d; }
+// The city: tens of thousands of towers across the valley floor, lit windows, lamp-lit streets, moving traffic.
+// uK.x: city amount. Blocks on a CC grid, one tower per block (some squares are open), downtown rises toward the centre.
+uniform vec4 uK;
+const float CC=34.;
+float cityMask(vec2 xz){ return 1.-length((xz-vec2(0.,-400.))/vec2(1060.,660.)); }
+vec3 gBq, gBsz; float gBid;
+float building(vec3 p){
+  vec2 id=floor(p.xz/CC), c=(id+.5)*CC; float m=cityMask(c);
+  if(m<=0. || p.y>320.) return 1e9;
+  float h1=hash12(id*1.13+.7), h2=hash12(id*2.71+4.2), h3=hash12(id*5.1+2.3), h4=hash12(id*3.3+9.1);
+  if(h1<.1) return 1e9;                                             // a square or a park
+  vec2 dc=c-vec2(0.,-400.); float down=exp(-dot(dc,dc)/(2.*360.*360.));
+  float H=(7.+26.*h2*h2+55.*down*h2+150.*pow(h2,5.)*down)*smoothstep(0.,.07,m);
+  vec2 hs=vec2(CC*.5-5.5-4.*h3, CC*.5-5.5-4.*h4);                  // streets at least 11 m wide
+  vec3 bq=p-vec3(c.x,0.,c.y); vec3 q=bq-vec3(0.,H*.5,0.); vec3 d=abs(q)-vec3(hs.x,H*.5,hs.y);
+  gBq=bq; gBsz=vec3(hs.x,H,hs.y); gBid=hash12(id*7.7+1.1);
+  return length(max(d,0.))+min(max(d.x,max(d.y,d.z)),0.); }
+vec3 cityStreet(vec3 p, float fp){
+  vec2 g=p.xz/CC; vec2 dd=abs(fract(g+.5)-.5)*CC; float ds=min(dd.x,dd.y);
+  float street=smoothstep(6.5,5.,ds);
+  float lx=abs(fract(p.x/14.)-.5)*14., lz=abs(fract(p.z/14.)-.5)*14.;
+  float pool=exp(-(lx*lx+(dd.y-4.5)*(dd.y-4.5))/10.)*step(dd.y,8.)+exp(-(lz*lz+(dd.x-4.5)*(dd.x-4.5))/10.)*step(dd.x,8.);
+  vec3 c=vec3(.01,.01,.012)+vec3(1.,.6,.27)*(.05*street+.7*pool);
+  // traffic on the avenues (every fourth street): headlights one way, tail lights the other
+  float ax=mod(floor(p.z/CC+.5),4.), az=mod(floor(p.x/CC+.5),4.);
+  if(ax<.5 && dd.y<3.){ float side=sign(p.z-floor(p.z/CC+.5)*CC); float s=fract(p.x/9.+uTime*.9*side+hash12(vec2(floor(p.z/CC+.5),3.)));
+    c+=(side>0.? vec3(1.,.92,.8) : vec3(1.,.12,.06))*smoothstep(.08,0.,abs(s-.5))*smoothstep(3.,1.,dd.y)*1.8; }
+  if(az<.5 && dd.x<3.){ float side=sign(p.x-floor(p.x/CC+.5)*CC); float s=fract(p.z/9.+uTime*.9*side+hash12(vec2(floor(p.x/CC+.5),7.)));
+    c+=(side>0.? vec3(1.,.92,.8) : vec3(1.,.12,.06))*smoothstep(.08,0.,abs(s-.5))*smoothstep(3.,1.,dd.x)*1.8; }
+  vec3 avg=vec3(1.,.62,.3)*.11;                                     // far away: the average glow of the streets
+  return mix(c, avg, smoothstep(1.5,5.,fp)); }
 float mapG(vec3 p, float t, out int mat, out float tone){
   int oct=t<2200.?7:(t<6000.?5:4);
   float dT=(p.y-terrainH(p.xz,oct))*.5; mat=0; tone=0.;
   float tn, pt; float dP=person(p,tn,pt); if(dP<dT){ mat=pt<0.? 2 : 1; tone=tn; gPart=pt; return dP; }
+  if(uK.x>0.){ vec3 sq=gBq, ss=gBsz; float si=gBid; float dB=building(p); if(dB<dT){ mat=3; return dB; } gBq=sq; gBsz=ss; gBid=si; }
   return dT; }
 vec3 personN(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=.003; float tn, pt;
   return normalize(k.xyy*person(p+k.xyy*h,tn,pt)+k.yyx*person(p+k.yyx*h,tn,pt)+k.yxy*person(p+k.yxy*h,tn,pt)+k.xxx*person(p+k.xxx*h,tn,pt)); }
-// A vigil: tens of thousands of candles held at chest height across the valley floor, each with the faint warm glow of
-// the face and hands above it. People are implied by their lights. uK: x amount, y ground light from candles.
-uniform vec4 uK;
-const float KC=1.3;
-float kMask(vec2 xz){ return 1.-length((xz-vec2(0.,-420.))/vec2(1050.,620.)); }
-vec3 candles(vec3 ro, vec3 rd, float tMax){
-  if(uK.x<=0.) return vec3(0);
-  float y0=.95, y1=1.85;
-  float ta, tb;
-  if(abs(rd.y)<1e-4){ if(ro.y<y0||ro.y>y1) return vec3(0); ta=0.; tb=tMax; }
-  else { float a=(y0-ro.y)/rd.y, b=(y1-ro.y)/rd.y; ta=max(min(a,b),0.); tb=min(max(a,b),tMax); }
-  if(tb<=ta) return vec3(0);
-  float pa=1./(uFov*uRes.y);
-  int NS=int(clamp(ceil((tb-ta)/KC),1.,28.));
-  vec3 acc=vec3(0); vec2 last=vec2(-1e9);
-  for(int s=0;s<28;s++){ if(s>=NS) break;
-    vec3 q=ro+rd*mix(ta,tb,(float(s)+.5)/float(NS));
-    vec2 b0=floor(q.xz/KC-.5);
-    for(int j=0;j<2;j++) for(int i=0;i<2;i++){ vec2 id=b0+vec2(i,j);
-      vec2 cc=(id+.5)*KC; float m=kMask(cc); if(m<=0.) continue;
-      float h1=hash12(id*1.7+3.1), h2=hash12(id*2.9+7.3), h3=hash12(id*.61+1.9);
-      if(h1>.62*smoothstep(0.,.06,m)) continue;
-      vec3 cp=vec3(cc.x+(h2-.5)*.8*KC, 1.05+.32*h3, cc.y+(fract(h3*7.3)-.5)*.8*KC);
-      float pw=.45+.75*fract(h2*5.1);
-      vec3 w=cp-ro; float tt=dot(w,rd); if(tt<=.3||tt>tMax) continue;
-      float th=length(w-rd*tt)/tt;
-      float fl=.8+.2*sin(uTime*(6.+h1*5.)+h2*40.)*sin(uTime*(2.3+h3*2.)+h1*9.);
-      float sc=max(.014/tt, .75*pa), far=pow(min(1., (.014/tt)/sc), 1.15);
-      acc+=vec3(1.,.62,.26)*fl*pw*(exp(-th*th/(2.*sc*sc))*3.5*far + exp(-th/(sc*7.))*.12*far);
-      vec3 fp=cp+vec3(0.,.36,.06); vec3 wf=fp-ro; float tf=dot(wf,rd);       // the face and hands above it, lit from below
-      if(tf>.3&&tf<tMax){ float tf2=length(wf-rd*tf)/tf, sf=max(.11/tf,.8*pa); acc+=vec3(.55,.3,.16)*fl*exp(-tf2*tf2/(2.*sf*sf))*.06*pow(min(1.,(.11/tf)/sf),.6); }
-    }
-  }
-  return acc*uK.x; }
 const vec3 PAL[6]=vec3[](vec3(.16,.07,.06), vec3(.2,.16,.11), vec3(.07,.08,.11), vec3(.11,.12,.09), vec3(.13,.125,.12), vec3(.3,.27,.23));
 vec3 terrainN(vec2 p, float t){ float e=.0012*t+.08; int oct=t<2200.?8:6;
   return normalize(vec3(terrainH(p-vec2(e,0),oct)-terrainH(p+vec2(e,0),oct), 2.*e, terrainH(p-vec2(0,e),oct)-terrainH(p+vec2(0,e),oct))); }
@@ -438,9 +436,13 @@ void main(){
   // solids: terrain + crowd
   float t=.3, tS=1e9; int mat=0; float tone=0.;
   for(int i=0;i<420;i++){ vec3 p=ro+rd*t; float d=mapG(p,t,mat,tone);
-    if(mat!=2 && d<(mat==1? .0005*t+.002 : .0015*t+.002)){ tS=t; break; }
+    if(mat!=2 && d<(mat==1? .0005*t+.002 : mat==3? .0006*t+.01 : .0015*t+.002)){ tS=t; break; }
     bool inC=uD.w>.5 && p.y<2.6 && crowdMask(p.xz)>-.01;
-    t+= inC? max(min(d,.3),.004) : max(d,.003*t); if(t>26000. || (rd.y>0. && p.y>2000.)) break; }
+    float st=inC? max(min(d,.3),.004) : max(d,.003*t);
+    if(uK.x>0. && p.y<330. && cityMask(p.xz)>-.06){                  // never step past the next block boundary
+      vec2 id=floor(p.xz/CC); vec2 rdx=vec2(abs(rd.x)>1e-5? rd.x : 1e-5, abs(rd.z)>1e-5? rd.z : 1e-5);
+      vec2 e=(vec2(rd.x>0.? id.x+1. : id.x, rd.z>0.? id.y+1. : id.y)*CC-p.xz)/rdx; st=min(max(d,.02), max(min(e.x,e.y),0.)+.05); }
+    t+=st; if(t>26000. || (rd.y>0. && p.y>2000.)) break; }
   // entity
   float glowAcc=0.; float tEye; vec3 eye=greatEye(ro,rd,E,S,tEye);
   vec3 ent; float tEnt; bool entHit=marchEntity(ro,rd,E,S,min(tEye,tS),ent,tEnt,glowAcc);
@@ -450,7 +452,19 @@ void main(){
     float lightPool=cloudShadowAt(p,L)*uB.x;
     if(uD.w>.5) lightPool*=.4+.6*exp(-pow(length((p.xz-vec2(0.,-150.))/vec2(560.,300.)),2.));   // a pool of its light on the people
     vec3 c;
-    if(mat==1){ vec3 n=personN(p); float part=gPart;
+    float fpx=tS/(uFov*uRes.y);
+    if(mat==3){ vec3 q=gBq-vec3(0.,gBsz.y*.5,0.); vec3 hs=vec3(gBsz.x,gBsz.y*.5,gBsz.z); vec3 aq=abs(q)/hs;
+      vec3 n= (aq.x>aq.y&&aq.x>aq.z)? vec3(sign(q.x),0.,0.) : (aq.y>aq.z? vec3(0.,sign(q.y),0.) : vec3(0.,0.,sign(q.z)));
+      float bid=gBid; vec3 wallC=mix(vec3(.022,.022,.026), vec3(.05,.045,.04), fract(bid*13.7))*(n.y>.5? .6 : 1.);
+      c=wallC*(lightC*max(dot(n,L),0.)*lightPool*.16 + vec3(.01,.012,.02));    // at night the towers are dark; their windows carry them
+      if(n.y<.5){ float u=abs(n.x)>.5? gBq.z : gBq.x; float v=p.y;
+        vec2 cl=vec2(floor(u/3.), floor(v/3.6)), f=vec2(fract(u/3.), fract(v/3.6));
+        float win=smoothstep(.16,.24,f.x)*smoothstep(.84,.76,f.x)*smoothstep(.22,.3,f.y)*smoothstep(.82,.74,f.y);
+        float litP=.22+.55*fract(bid*7.31), h=hash12(cl+vec2(bid*91.,n.x*13.+n.z*7.));
+        vec3 wc=mix(vec3(1.,.7,.4), vec3(1.,.86,.62), fract(h*17.)); if(fract(h*31.)>.93) wc=vec3(.7,.82,1.);
+        vec3 lit=wc*(.9+1.5*fract(h*5.3))*step(h,litP)*win, avg=vec3(1.,.78,.5)*litP*.38*1.5;
+        c+=mix(lit, avg, smoothstep(.9,2.4,fpx))*step(3.4,v)*step(v,gBsz.y-1.5); }
+    } else if(mat==1){ vec3 n=personN(p); float part=gPart;
       float diff=max(dot(n,L),0.), wrap=max(dot(n,L)*.5+.5,0.);
       float rim=pow(1.-max(dot(n,-rd),0.),3.)*wrap;
       float occ=.2+.8*smoothstep(.2,1.65,p.y);                       // the people in front shade the lower body
@@ -465,15 +479,14 @@ void main(){
       float snow=smoothstep(650.,1100.,p.y+n.y*120.)*smoothstep(.55,.85,n.y);
       vec3 alb=mix(vec3(.035,.032,.03), vec3(.55,.56,.6), snow);
       c=alb*(lightC*diff*sh*lightPool*.9 + vec3(.012,.018,.035)*(.5+.5*n.y));
-      if(uK.y>0.) c+=alb*vec3(1.,.58,.25)*uK.y*smoothstep(0.,.08,kMask(p.xz))*(.6+.4*noise(vec3(p.xz*.8,1.)));
+      if(uK.x>0.){ float cm=smoothstep(0.,.05,cityMask(p.xz)); c=mix(c, cityStreet(p,fpx), cm); }
     }
     float fogAmt=1.-exp(-tS*.00011); vec3 fogC=mix(vec3(.012,.017,.03), vec3(.35,.27,.17)*uA.z*.12, pow(max(dot(rd,gAx),0.),6.));
     c=mix(c, fogC, fogAmt);
-    float vfog=exp(-max(p.y,0.)*.012)*(1.-exp(-tS*.004))*.35; c=mix(c, vec3(.03,.035,.05)+lightC*.02*lightPool, vfog);
+    float vfog=exp(-max(p.y,0.)*.012)*(1.-exp(-tS*.004))*(uK.x>0.? .15 : .35); c=mix(c, vec3(.03,.035,.05)+lightC*.02*lightPool, vfog);
     col=c;
   } else if(entHit){ float haze=1.-exp(-tEnt*.000035*uB.w); col=mix(ent, vec3(.04,.05,.08)+ent*.55, haze); }
   col+=vec3(1.,.84,.6)*glowAcc*uA.z;
-  col+=candles(ro,rd,min(min(tS,tEnt),30000.));
   // cloud deck in front of whatever was hit
   vec2 sl=slab(ro,rd,uD.x,uD.y); float tMax=min(min(tS,tEnt),30000.);
   if(sl.x<sl.y && sl.x<tMax){ float ta=sl.x, tb=min(min(sl.y,tMax), ta+14000.); float L=tb-ta; float T=1.; vec3 cc=vec3(0);

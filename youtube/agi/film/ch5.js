@@ -328,7 +328,7 @@ vec3 ringEye(vec3 lp, int id, vec3 camL, out float isEye){
   float th=atan(lp.z,lp.x); vec3 radial=normalize(vec3(lp.x,0.,lp.z)); vec3 v=lp-radial*R; float ph=atan(v.y, dot(v,radial));
   float N=floor(9.+float(id)*4.); float cell=6.2831853/N; float k=floor(th/cell+.5); float u=(th-k*cell)*R;
   float kk=mod(k+N,N); float h=hash12(vec2(kk*1.37+3.1, float(id)*7.3+1.9));
-  float o0=(float(id)+h*2.4)/7.6; float op=smoothstep(o0,o0+.045,uA.y);
+  float o0=(float(id)+h*2.4)/7.6*.88; float op=smoothstep(o0,o0+.12,uA.y);
   float w=ph*r; float e=1.-(u*u)/(EW*EW); if(e<=0.||abs(ph)>1.45) return vec3(0);
   float lid=EH*e*op;
   if(abs(w)>lid){ if(abs(w)<lid+.0035*e+.001) { isEye=.5; } return vec3(0); }
@@ -341,6 +341,7 @@ vec3 ringEye(vec3 lp, int id, vec3 camL, out float isEye){
   if(d<ir) c=mix(vec3(2.6,1.5,.5), vec3(.8,.36,.07), d/ir)*(.8+.2*sin(atan(q.y,q.x)*18.));
   if(d<pr) c=vec3(.002);
   if(length(q-vec2(-.3,.35)*ir)<.18*ir) c=vec3(3.);
+  c+=vec3(1.4,1.,.55)*exp(-pow((op-.45)/.22,2.))*1.2;            // light spills from each eye as it opens
   return c*(.3+.7*smoothstep(0.,.6,op)); }
 vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, out float tHit){
   tHit=1e9; float R=0.66*S; vec3 oc=ro-E; float b=dot(oc,rd), c=dot(oc,oc)-R*R, h=b*b-c; if(h<0.) return vec3(-1.);
@@ -465,14 +466,35 @@ void main(){
   const TO_CAM = [0, 0, -1];
   const REST_LOOK = norm([-0.36, -0.52, -0.77]);
   const RING_PHASE5 = 1336.4;          // searched: every ring's near arc stays ≥1.3 eye radii off the pupil for this camera, 50–70 s
+  // where every ring eye sits and when it opens (mirrors the shader), for the light that blooms as each one wakes
+  const hash12 = (x, y) => { let a = (x * .1031) % 1, b = (y * .1031) % 1, c = (x * .1031) % 1; if (a < 0) a += 1; if (b < 0) b += 1; if (c < 0) c += 1;
+    const d = a * (b + 33.33) + b * (c + 33.33) + c * (a + 33.33); a += d; b += d; c += d; const v = ((a + b) * c) % 1; return v < 0 ? v + 1 : v; };
+  const EYES = (() => { const a = []; for (let id = 0; id < 6; id++) { const N = Math.floor(9 + id * 4), R = 1.05 + id * 0.3;
+    for (let kk = 0; kk < N; kk++) { const h = hash12(kk * 1.37 + 3.1, id * 7.3 + 1.9); a.push({ id, th: kk * 2 * Math.PI / N, R, o0: (id + h * 2.4) / 7.6 * 0.88 }); } } return a; })();
+  function eyeBlooms(k, cam, rings) {
+    const ro = clamp((k - 51) / 7.2);
+    o.save(); o.globalCompositeOperation = "lighter";
+    for (const e of EYES) {
+      const u = (ro - e.o0) / 0.12; if (u < 0.15 || u > 2.5) continue;
+      const M = rings.slice(e.id * 9, e.id * 9 + 9), q = [e.R * Math.cos(e.th), 0, e.R * Math.sin(e.th)];
+      const w = [M[0] * q[0] + M[1] * q[1] + M[2] * q[2], M[3] * q[0] + M[4] * q[1] + M[5] * q[2], M[6] * q[0] + M[7] * q[1] + M[8] * q[2]];  // ring -> world (transpose)
+      const P = project(cam, add3(OE, mul3(w, OS))); if (!P || P[1] < BAR || P[1] > H - BAR) continue;
+      const a = Math.exp(-Math.pow((u - 0.55) / 0.45, 2)) * 0.75;
+      const g = o.createRadialGradient(P[0], P[1], 0, P[0], P[1], 70); g.addColorStop(0, `rgba(255,236,200,${a})`); g.addColorStop(0.25, `rgba(255,190,110,${a * 0.45})`); g.addColorStop(1, "rgba(255,160,80,0)");
+      o.fillStyle = g; o.beginPath(); o.arc(P[0], P[1], 70, 0, 7); o.fill();
+    }
+    o.restore();
+  }
   function orbitFrame(k, T) {
     const fin = FINAL();
     // scene clock: runs normally, nearly stops in the silence (60–64), resumes for the gaze
     const clock = k < 59.5 ? k : k < 64.5 ? 59.5 + 0.06 * (k - 59.5) : 59.8 + (k - 64.5);
     const rise = easeIO(clamp((k - 50) / 14));
     const pos = add3(OC, [0, 420 * rise, 900 * rise]);
-    const fov = OFOV * (1 + 0.16 * easeIO(clamp((k - 64) / 6)));
-    const cam = look(pos, add3(pos, [0, -0.002 * rise, 1]), fov);
+    const rev = 1 - Math.pow(1 - clamp((k - 50) / 3.4), 3);         // ease-out pull-back from the core
+    const fov = OFOV * (1 + 0.16 * easeIO(clamp((k - 64) / 6))) * lerp(6.0, 1.0, rev);
+    const fwdN = norm([0, -0.002 * rise, 1]), toE = norm(sub(OE, pos));
+    const cam = look(pos, add3(pos, norm(add3(mul3(toE, 1 - rev), mul3(fwdN, rev)))), fov);
     const gaze = easeIO(clamp((k - 64.3) / 2.6));
     const sock = norm(add3(mul3(norm(add3(TO_CAM, REST_LOOK)), 1 - gaze), mul3(TO_CAM, gaze * 1.0001)));
     const eyeOpen = easeIO(clamp((k - 57.4) / 2.8));
@@ -482,13 +504,14 @@ void main(){
     const core = (1.0 + 0.6 * eyeOpen) * (1 + pulse);
     const ringLight = 0.75 + 0.35 * smooth(50, 52, k) + 0.3 * eyeOpen;
     const q = project(cam, OE), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
-    const flash = 1 - smooth(50, 50.9, k);
+    const flash = 1 - smooth(50, 52.6, k);
     GL.frame({ name: "ch5_orbit", fs: SHADERS.ch5_orbit, scale: SC(0.55, 1.5),
       uniforms: { uTime: 405 + clock, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, 0], uC: [...OE, OS],
         uD: [1.0 + 0.3 * eyeOpen, 1.0, fin ? 1 : 0, clock], uRing: heavensRings(RING_PHASE5 + (clock - 50) * 0.018), uSock: sock, uLook: REST_LOOK } },
       { bloom: 0.45 + 0.4 * flash, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.22 + 0.1 * eyeOpen], letterbox: LB, vignette: 0.6,
-        lift: 0.55 * Math.pow(flash, 3), fade: 1 - smooth(69.2, 70, k), t: T });
+        lift: 0.75 * Math.pow(flash, 2.2), fade: 1 - smooth(69.2, 70, k), t: T });
     blit();
+    pic(() => eyeBlooms(k, cam, heavensRings(RING_PHASE5 + (clock - 50) * 0.018)));
   }
 
   // =====================================================================================================
