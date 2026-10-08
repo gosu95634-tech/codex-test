@@ -23,7 +23,8 @@ const [buf, g] = mk(), [tmp, tg] = mk(), [post, pg] = mk();
 // Flash gating: white pops only on hits at least 0.34 s apart, so the film never exceeds 3 flashes per second.
 let FLASHES_AT = [];
 function gateFlashes() {
-  const hits = CUES.events.filter(e => ["impact", "stab", "title", "slam", "cut", "fanfare", "explode", "launch", "freeze"].includes(e.type)).map(e => e.b * SPB).sort((a, b) => a - b);
+  // the rapid montage (b192–208) already alternates bright/dark cuts, so it gets no extra white pops
+  const hits = CUES.events.filter(e => ["impact", "stab", "title", "slam", "cut", "fanfare", "explode", "launch", "freeze"].includes(e.type) && !(e.type === "cut" && e.b > 192 && e.b < 208)).map(e => e.b * SPB).sort((a, b) => a - b);
   FLASHES_AT = []; let last = -9;
   for (const h of hits) if (h - last >= 0.34) { FLASHES_AT.push(h); last = h; }
 }

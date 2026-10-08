@@ -26,8 +26,8 @@ function thumbA() {
   halftoneBurst(g, W * 0.62, H * 0.42, 1300, 1.0, 0.2);
   g.save(); g.globalCompositeOperation = "lighter"; glow(g, W * 0.64, H * 0.3, 900, "rgba(255,120,40,ALPHA)", 0.55); g.restore();
   drawMecha(g, W * 0.66, H * 0.66, 1.15, t, { eyes: 1, core: 1.4 });
-  drawDario(g, W * 0.27, H + 120, 1000, t, { wind: 1.6 });
-  starFlare(g, W * 0.27 - 16 * 1000 / 560, H + 120 - 500 * 1000 / 560, 1.5);
+  drawDario(g, W * 0.22, H + 110, 700, t, { wind: 1.6 });
+  starFlare(g, W * 0.22 - 16 * 700 / 560, H + 110 - 500 * 700 / 560, 0.6);
   txt(g, "아모데이의", 70, 170, { size: 190, align: "left", fill: null, stroke: ORANGE, lw: 44 });
   txt(g, "아모데이의", 70, 170, { size: 190, align: "left", fill: null, stroke: INK, lw: 22 });
   txt(g, "아모데이의", 70, 170, { size: 190, align: "left", fill: PAPER });
