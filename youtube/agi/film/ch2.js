@@ -29,7 +29,7 @@ out vec2 vP; out vec2 vA; out vec2 vB; out vec3 vCol; out float vR;
 void main(){
   vec2 a=aSeg.xy*uS, b=aSeg.zw*uS; float r0=aCol.w*uS; float r=max(r0,.8);
   vec2 d=b-a; float L=length(d); vec2 t=L>1e-3? d/L : vec2(1.,0.); vec2 n=vec2(-t.y,t.x);
-  float ext=r*4.;
+  float ext=r*5.;
   vec2 p=(aC.x<0.? a : b)+t*aC.x*ext+n*aC.y*ext;
   float k=r0/r; float e=1.+1./(1.+L/r);                 // energy kept when the core is clamped to sub-pixel
   vP=p; vA=a; vB=b; vR=r; vCol=aCol.rgb*pow(k,e);
@@ -37,7 +37,7 @@ void main(){
     const FS = `#version 300 es
 precision highp float; in vec2 vP; in vec2 vA; in vec2 vB; in vec3 vCol; in float vR; out vec4 o;
 void main(){ vec2 pa=vP-vA, ba=vB-vA; float h=clamp(dot(pa,ba)/max(dot(ba,ba),1e-6),0.,1.); float d=length(pa-ba*h)/vR;
-  float g=exp(-d*d)+.07*exp(-d*d*.11); o=vec4(vCol*g,1.); }`;
+  float w=max(1.-d*d/25.,0.); float g=exp(-d*d)+.07*exp(-d*d*.11)*w*w; o=vec4(vCol*g,1.); }`;
     function init() {
       const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; };
       prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
@@ -282,7 +282,7 @@ vec3 shade(vec3 p, vec3 n, vec3 rd, vec3 alb, float gloss, float wrap, float shO
 void main(){
   vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
   vec3 col=vec3(.0015,.0015,.003);
-  if(uF.x>0.) col=mix(col,(nebula(rd,vec3(.03,.024,.05),vec3(.26,.17,.08))*.55+stars(rd,1.))*smoothstep(-.05,.25,rd.y)*1.,uF.x);
+  if(uF.x>0.) col=mix(col,(nebula(rd,vec3(.035,.026,.055),vec3(.30,.19,.08))*.7+stars(rd,1.))*smoothstep(-.05,.25,rd.y)*1.,uF.x);
   float tHit=1e9; int what=0; // 1 desk, 2 parchment, 3 object
   // desk plane
   if(rd.y<0.){ float t=-ro.y/rd.y; if(t>0.){ tHit=t; what=1; } }
@@ -472,6 +472,16 @@ void main(){
       const a = emberLocal(e, k, flw); if (!a) continue;
       const b = emberLocal(e, k - dt, flw) || a;
       let A = toWorld(a), B = toWorld(b);
+      // star embers float up through the air to their place in the sky (3D, so their motion blur is real);
+      // the target sits where the sky camera will see the star once the desk camera has finished its tilt
+      const st = e.word && out.tw ? e.star : -1;
+      let us = 0;
+      if (st >= 0 && out.tw[st]) {
+        const t0 = 32.5 + (i % 9) * 0.12, tw = out.tw[st];
+        const uu = (t) => easeIO(clamp((t - t0) / 2.4));
+        const fly = (P, u) => { const p = mix3(P, tw, u); p[1] += Math.sin(u * Math.PI) * 0.35 * (0.6 + 0.4 * hsh(i, 5)); return p; };
+        us = uu(k); A = fly(A, us); B = fly(B, uu(k - dt));
+      }
       let pa = project(cam, A), pb = project(cam, B); if (!pa || !pb) continue;
       let life = a[3]; if (life <= 0) continue;
       const locked = a[4] || 0;
@@ -481,15 +491,23 @@ void main(){
       const heat = clamp(1 - tau * 0.18) * 0.6 + locked * 0.5 + e.temp * 0.2;
       let I = (0.6 + 0.9 * fl) * life * (1 - 0.72 * sm(27.6, 29.5, k) * locked);
       // scattering into stars at the end of the section
+      let rad = e.size * 1.6 / Math.max(pa[2], 0.3), cr = 1.0, cg = 0.42 + 0.38 * heat, cb = 0.1 + 0.32 * heat * heat;
+      // the swarm drifts up with the camera: star embers glide to their places in the sky and settle into stars,
+      // the rest keep rising and cool out like real embers
       if (scatter > 0 && e.word) {
-        const st = e.star;
-        if (st >= 0 && out.stars) { const sp = out.stars[st]; if (sp) { const u = ease(clamp((k - 32.8 - (i % 7) * 0.08) / 2.8)); pa = [lerp(pa[0], sp[0], u), lerp(pa[1], sp[1], u), pa[2]]; pb = [lerp(pb[0], sp[0], u), lerp(pb[1], sp[1], u), pb[2]]; I = lerp(I, sp[2], u); } }
-        else { const drift = scatter * scatter; const dx = (hsh(i, 1) - 0.5) * 900 * drift, dy = -(0.3 + hsh(i, 2)) * 500 * drift;
-          pa = [pa[0] + dx, pa[1] + dy, pa[2]]; pb = [pb[0] + dx * 0.97, pb[1] + dy * 0.97, pb[2]]; I *= 1 - sm(33.2, 35.8, k) * (0.6 + 0.4 * hsh(i, 3)); }
+        if (st >= 0 && out.tw[st]) {
+          const n = out.tree[st], u = us;
+          // converge on the exact look of the sky's star: gold, 1.4*m, core 1.4+1.8m
+          I = lerp(I, 1.4 * n.m * (0.8 + 0.2 * Math.sin(T * (2 + st % 5) + st)) / 3.2, u); rad = lerp(rad, 1.4 + n.m * 1.8, u);
+          cg = lerp(cg, 0.72, u); cb = lerp(cb, 0.38, u);
+        } else {
+          const drift = scatter * scatter, h1 = hsh(i, 1) - 0.5, h2 = 0.4 + hsh(i, 2);
+          const dx = h1 * 120 * drift, dy = -h2 * 260 * drift, dyb = -h2 * 260 * sm(32.6, 35.5, k - dt) ** 2;
+          pa = [pa[0] + dx, pa[1] + dy, pa[2]]; pb = [pb[0] + dx, pb[1] + dyb, pb[2]];
+          I *= 1 - sm(32.8 + hsh(i, 3) * 1.2, 34.6 + hsh(i, 3) * 1.2, k);
+        }
       }
-      const dist = pa[2]; const rad = e.size * 1.6 / Math.max(dist, 0.3);
       const L = Math.hypot(pa[0] - pb[0], pa[1] - pb[1]); const norm1 = rad * 1.8 / (L + rad * 1.8);
-      const cr = 1.0, cg = 0.42 + 0.38 * heat, cb = 0.1 + 0.32 * heat * heat;
       const s = I * 3.2 * norm1;
       seg(pb[0], pb[1], pa[0], pa[1], cr * s, cg * s, cb * s, rad);
       if (k < 33) { cx += A[0]; cy += A[1]; cz += A[2]; cn++; }
@@ -510,7 +528,7 @@ void main(){
       eL = [...p, 0.035 * I];
     }
     let swarm = [0, 0, 0, 0];
-    if (k > 18.2) swarm = drawEmbers(k, T, cam, { stars: SKY_STARS_SCREEN(k) });
+    if (k > 18.2) swarm = drawEmbers(k, T, cam, { tw: SKY_STARS_WORLD(), tree: buildTree() });
     const tex = SEG.render(sc);
     const P = wordPlane();
     const wordReveal = clamp((k - 26.3) / 1.7), wordGlow = sm(26.0, 27.2, k) * (1 - sm(32.6, 34.2, k)) * (0.92 + 0.08 * Math.sin(T * 2.1));
@@ -553,10 +571,8 @@ void main(){
     TREE = nodes; return nodes;
   }
   const atlasW = (x, y) => add3(mul3(SKY_F0, 10), add3(mul3(SKB.r, x), mul3(SKB.u, y)));
-  function SKY_STARS_SCREEN(k) {
-    const T = buildTree(), cam = skyCam(36);
-    return T.map(n => { const p = project(cam, atlasW(n.x, n.y)); return p ? [p[0], p[1], 2.5 * n.m] : null; });
-  }
+  // star positions as seen from the desk camera's final pose (P4, looking along SKY_F0)
+  const SKY_STARS_WORLD = () => buildTree().map(n => add3(atlasW(n.x, n.y), [-0.6, 1.02, 1.12]));
   const FROST = `
 float fern(vec2 uv, vec2 c, float s, float seed){
   vec2 q=uv*s; vec2 id=floor(q); float f=0.;
@@ -615,7 +631,7 @@ void main(){
     const cc = mix3(gold, silver, winter);
     N.forEach((n, i) => {
       const p = P[i]; if (!p) return;
-      const on = sm(35.2, 36.4, k), fl = sm(n.t, n.t + 0.4, k);
+      const on = 1, fl = sm(n.t, n.t + 0.4, k);
       const tw = winter > 0.5 ? 1 : 0.8 + 0.2 * Math.sin(T * (2 + i % 5) + i);
       const brk = k > 56 ? sm(56 + hsh(i, 9) * 6, 57 + hsh(i, 9) * 6, k) * (i % 3 === 0 ? 0.85 : 0.3) : 0;
       const I = n.m * (1.4 * on + 2.5 * fl * Math.exp(-Math.max(k - n.t - 0.3, 0) * 1.5) + 0.8 * fl) * tw * (1 - brk);
