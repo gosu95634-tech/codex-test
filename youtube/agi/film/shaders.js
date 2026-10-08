@@ -103,11 +103,11 @@ vec3 centralEye(vec3 ro, vec3 rd, float S, out float tHit){
   vec3 shell=vec3(.02,.018,.022)+vec3(1.,.72,.35)*fil*.5 + vec3(1.,.8,.5)*pow(1.-max(dot(n,-rd),0.),3.)*1.2;
   if(abs(q.y)>lid || abs(q.x)>0.9) return shell;
   vec2 g=q-vec2(sin(uTime*.31)*.04*uA.w, cos(uTime*.23)*.02*uA.w); float d=length(g);
-  vec3 col=vec3(3.2,2.9,2.4)*(1.-.35*smoothstep(lid*.6,lid,abs(q.y)));
-  float ir=0.27;
-  if(d<ir){ float fib=.65+.35*sin(atan(g.y,g.x)*48.+d*90.); col=mix(vec3(6.,3.4,1.1), vec3(1.6,.7,.15), smoothstep(0.,ir,d))*fib; col+=vec3(5.,3.,1.)*smoothstep(.02,0.,abs(d-ir*.98)); }
-  if(d<0.105) col=vec3(0.002);
-  if(d<0.112 && d>0.1) col=vec3(6.,3.,1.);
+  vec3 col=vec3(1.5,1.35,1.1)*(1.-.45*smoothstep(lid*.5,lid,abs(q.y)));
+  float ir=0.34;
+  if(d<ir){ float fib=.65+.35*sin(atan(g.y,g.x)*48.+d*90.); col=mix(vec3(4.5,2.4,.6), vec3(.9,.36,.06), smoothstep(0.,ir,d))*fib; col+=vec3(3.,1.6,.5)*smoothstep(.015,0.,abs(d-ir*.98)); }
+  if(d<0.13) col=vec3(0.002);
+  if(d<0.138 && d>0.127) col=vec3(5.,2.6,.8);
   if(length(g-vec2(-.06,.07))<.03) col=vec3(9.);
   return col; }
 void main(){
@@ -117,7 +117,7 @@ void main(){
   float S=uA.y;
   for(int i=0;i<120;i++){
     vec3 p=ro+rd*t; float d=map(p,id,lp);
-    float dc=length(p)-0.52*S; glow+=exp(-max(dc,0.)*7./S)*0.012;
+    float dc=length(p)-0.52*S; glow+=exp(-max(dc,0.)*11./S)*0.006;
     ringGlow+=exp(-d*70./S)*0.004;
     if(d<0.0006*t){ hit=true; break; }
     t+=d*0.8; if(t>40.) break;
@@ -133,7 +133,7 @@ void main(){
     vec3 gold=vec3(1.0,.72,.33)*groove;
     vec3 refl=nebula(reflect(rd,n), vec3(.05,.035,.11), vec3(.42,.26,.09))*2.;
     col = gold*(diff*3.2/(1.+dist*dist*.2) + 0.02) + core*spec*5. + gold*refl*.6 + vec3(1.,.8,.5)*fres*.5;
-    float isEye; vec3 ec=eyeColor(lp,id,uA.x,isEye);
+    float isEye; vec3 ec=eyeColor(lp,id,uC.y,isEye);
     if(isEye>.5) col=ec*(0.7+0.5*diff);
   } else col=bg;
   float tE; vec3 ec=centralEye(ro,rd,S,tE);
