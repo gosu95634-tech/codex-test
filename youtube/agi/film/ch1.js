@@ -370,6 +370,90 @@ void main(){
   col+=vec3(1.,.9,.75)*uA.y*uA.y*0.6;
   fragColor=vec4(col,1.); }`;
 
+// ---------------------------------------------------------------- C. the intelligence staircase
+// Veined marble slabs with gold nosing, floating in a step pattern from a sea of cloud up through a cloud deck into blinding light.
+// uA: rise, run, half width, sun intensity   uB: cloud deck y0, y1, hole radius, cloud cover   uD: sun dir xyz, quality
+const ST = { rise: 0.62, run: 1.25, wd: 1.7 };
+SHADERS.ch1_stairs = COMMON + LIB + `
+uniform vec4 uD;
+vec3 SUN; const float TH=0.15, DEP=0.52;
+float slabD(vec3 p, float j){ vec3 q=p-vec3(0., j*uA.x, j*uA.y); return sdBox(q, vec3(uA.z-0.035, TH-0.035, DEP-0.035))-0.035; }
+float mapS(vec3 p, out float jj){ float j=floor(p.z/uA.y+.5); float d=1e9; jj=0.;
+  for(int o=-1;o<=1;o++){ float jc=j+float(o); if(jc<0.) continue; float di=slabD(p,jc); if(di<d){ d=di; jj=jc; } }
+  return min(d, 1.); }
+float mapS0(vec3 p){ float j; return mapS(p,j); }
+vec3 nrmS(vec3 p, float t){ vec2 e=vec2(.0008+.0004*t,0.); return normalize(vec3(mapS0(p+e.xyy)-mapS0(p-e.xyy), mapS0(p+e.yxy)-mapS0(p-e.yxy), mapS0(p+e.yyx)-mapS0(p-e.yyx))); }
+float shS(vec3 p){ float res=1., t=0.03; for(int i=0;i<24;i++){ float d=mapS0(p+SUN*t); res=min(res,12.*d/t); if(res<0.02) return 0.; t+=clamp(d,0.03,0.5); if(t>9.) break; } return clamp(res,0.,1.); }
+vec3 skyS(vec3 rd){ float sd=max(dot(rd,SUN),0.);
+  vec3 c=mix(vec3(.006,.008,.018), vec3(.012,.016,.034), smoothstep(-.5,.5,rd.y));
+  c+=vec3(.05,.04,.035)*exp(-abs(rd.y-.02)*9.);
+  c+=stars(rd,.35)*(1.-smoothstep(.6,.95,sd))*smoothstep(-.05,.3,rd.y);
+  c+=vec3(1.,.8,.52)*(pow(sd,5.)*.025+pow(sd,40.)*.22+pow(sd,350.)*2.5+pow(sd,4000.)*70.)*uA.w;
+  return c; }
+float axisDist(vec3 p){ vec3 A=normalize(vec3(0.,uA.x,uA.y)); return length(p-A*dot(p,A)); }
+// sea of cloud below the first steps: billowed top surface, soft volumetric body
+float seaTop(vec2 xz){ vec2 q=xz*.075+vec2(uTime*.004,uTime*.008); float b=fbm(vec3(q,1.3)); float c=fbm(vec3(xz*.21+vec2(uTime*.01,0.),4.1)); return uB.x+3.6*b*b+1.3*c*c-1.; }
+float seaD(vec3 p){ float h=seaTop(p.xz); float d=clamp((h-p.y)*1.4,0.,1.); if(d<=0.) return 0.; return d*(.55+.45*noise(p*.45+vec3(0.,uTime*.02,0.))); }
+float seaCheap(vec3 p){ vec2 q=p.xz*.075+vec2(uTime*.004,uTime*.008); float b=noise(vec3(q,1.3))*.55+noise(vec3(q*2.03,1.3))*.27; float h=uB.x+3.6*b*b+.25-1.; return clamp((h-p.y)*1.4,0.,1.); }
+vec3 marbleS(vec3 p){ float w=fbm(p*1.1+vec3(2.,7.,1.));
+  float v1=abs(sin((p.x*.8+p.z*.5+p.y*.3)*2.6+w*8.)); float v2=abs(sin((p.x*.5-p.z*.9)*8.+fbm(p*3.5)*6.));
+  vec3 c=vec3(.93,.9,.85)*(.9+.1*w); c=mix(c,vec3(.42,.41,.42),smoothstep(.07,0.,v1)*.55); c=mix(c,vec3(.64,.61,.58),smoothstep(.045,0.,v2)*.32);
+  c=mix(c,vec3(.86,.68,.38),smoothstep(.018,0.,v1)*.45); return c; }
+void main(){
+  vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy); SUN=normalize(uD.xyz);
+  float t=0.05, jj=0.; bool hit=false; int N=uD.w>.5? 220 : 150;
+  for(int i=0;i<220;i++){ if(i>=N) break; vec3 p=ro+rd*t; float d=mapS(p,jj); if(d<0.0006*t+0.0003){ hit=true; break; } t+=d*0.95; if(t>180.) break; }
+  vec3 col; float tEnd=hit? t : 1e9;
+  if(hit){ vec3 p=ro+rd*t; vec3 n=nrmS(p,t); vec3 q=p-vec3(0.,jj*uA.x,jj*uA.y);
+    float sh=t<45.? shS(p+n*0.01) : 1.;
+    vec3 alb=marbleS(q*1.3+vec3(jj*3.7,jj*1.3,0.));
+    float topF=smoothstep(.5,.9,n.y);
+    float aaW=0.012+t*.0015;
+    float nose=smoothstep(.05+aaW,.05,abs(q.z+DEP-.05))*smoothstep(.06+aaW,.06,abs(q.y-TH+.06));        // gold band round the front top edge
+    float side=smoothstep(.04+aaW,.04,abs(abs(q.x)-uA.z+.04))*smoothstep(.05+aaW,.05,abs(q.y-TH+.05));
+    float gold=max(nose,side);
+    float dif=max(dot(n,SUN),0.)*sh;
+    vec3 K=normalize(vec3(.75,.8,-.55)); float difK=max(dot(n,K),0.);     // warm key from the camera side
+    vec3 amb=vec3(.03,.036,.056)*(.6+.4*n.y)+vec3(.03,.026,.02)*max(-n.y,0.);
+    vec3 R=reflect(rd,n);
+    float Fm=schlick(dot(n,-rd),.045);
+    float spec=pow(max(dot(R,SUN),0.),80.)*sh, specK=pow(max(dot(R,K),0.),40.);
+    float fr=1.-max(dot(n,-rd),0.);
+    float rim=smoothstep(.55,.95,fr)*pow(max(dot(rd,SUN),0.),2.);
+    float trans=pow(max(dot(rd,SUN),0.),5.)*.3*(1.-topF);              // marble glowing through when seen against the light
+    vec3 c=alb*(vec3(1.,.86,.66)*dif*1.5*uA.w+vec3(1.,.84,.66)*difK*.55*uD.w*0.+vec3(1.,.84,.66)*difK*.55+amb) + vec3(1.,.9,.75)*(spec*8.*uA.w+specK*1.2)*Fm + vec3(1.,.78,.5)*(trans+rim*.8)*uA.w*alb + skyS(R)*Fm*.8;
+    vec3 gc=GOLDC*(skyS(R)*1.6 + vec3(1.,.85,.6)*(dif*.9+pow(max(dot(R,SUN),0.),16.)*sh*5.)*uA.w + vec3(1.,.84,.6)*(difK*.5+pow(max(dot(R,K),0.),12.)*1.6) + vec3(.02,.02,.03));
+    c=mix(c, gc, gold);
+    float f=1.-exp(-t*.016); vec3 hz=skyS(rd)*.75+vec3(.012,.014,.024);
+    col=mix(c, hz, f);
+  } else col=skyS(rd);
+  // glowing mist below the stairs (analytic exponential height fog)
+  { float a=.12, b=.9, y0=-3.; float tt=min(tEnd,140.);
+    float fd= abs(rd.y)>1e-4 ? (a/b)*exp(-b*(ro.y-y0))*(1.-exp(-b*rd.y*tt))/rd.y : a*exp(-b*(ro.y-y0))*tt;
+    float fm=1.-exp(-max(fd,0.));
+    vec3 mc=vec3(.02,.024,.042)+vec3(1.,.8,.55)*pow(max(dot(rd,SUN)*.5+.5,0.),8.)*.1*uA.w;
+    col=mix(col, mc, fm); }
+  // sea of cloud (volumetric slab from the billow tops down)
+  { float yT=uB.x+3.9, yB=uB.x-1.8; if(rd.y<-1e-4 && ro.y>yB){ float ta=max((yT-ro.y)/rd.y,0.), tb=min((yB-ro.y)/rd.y, min(tEnd,260.));
+      if(tb>ta){ int NS=uD.w>.5? 64 : 36; float T=1.; vec3 cc=vec3(0); float jit=hash12(gl_FragCoord.xy+fract(uTime*5.3)*61.);
+        float dt=(tb-ta)/float(NS); dt=max(dt,.15); float tt=ta+dt*jit;
+        for(int i=0;i<64;i++){ if(i>=NS||tt>tb) break; vec3 p=ro+rd*tt; float dn=seaD(p);
+          if(dn>.002){ float a=1.-exp(-dn*dt*1.8);
+            float od=seaCheap(p+SUN*.8)+seaCheap(p+SUN*2.)*1.2; float lt=exp(-od*2.2);
+            vec3 K=normalize(vec3(.75,.8,-.55)); float ltK=exp(-(seaCheap(p+K*1.2))*2.);
+            float fwd=pow(max(dot(rd,SUN),0.),5.);
+            float depth=clamp((seaTop(p.xz)-p.y)/2.,0.,1.);
+            vec3 lc=vec3(.012,.015,.03)*(1.-depth*.7) + vec3(1.,.8,.52)*lt*(.14+fwd*2.4)*uA.w*(1.-exp(-dn*3.)) + vec3(1.,.86,.7)*ltK*.16*(1.-depth)*(1.-depth);
+            float fog=1.-exp(-tt*.012); lc=mix(lc, skyS(rd)*.8+vec3(.015,.018,.03), fog);
+            cc+=T*a*lc; T*=1.-a; if(T<.02) break; }
+          tt+=dt*(.6+.8*hash12(vec2(float(i),jit))); }
+        col=col*T+cc; } } }
+  // a column of light pouring down the flight
+  { float ls=0.; float tmax=min(tEnd,90.); for(int i=0;i<12;i++){ float tt=tmax*(float(i)+.5)/12.; vec3 p=ro+rd*tt; float ad=axisDist(p);
+      float along=dot(p,normalize(vec3(0.,uA.x,uA.y))); ls+=exp(-ad*ad*.45)*smoothstep(0.,50.,along); } col+=vec3(1.,.82,.55)*ls*tmax/12.*.0007*uA.w*uB.z; }
+  col+=vec3(1.,.85,.62)*pow(max(dot(rd,SUN),0.),14.)*.05*uA.w;
+  fragColor=vec4(col,1.); }`;
+
 // ---------------------------------------------------------------- frame helpers
 const fin = () => FINAL();
 const CAM = (pos, at, fov = 1.3) => ({ pos, fwd: norm(sub(at, pos)), up: [0, 1, 0], fov });
@@ -419,6 +503,41 @@ function sceneArmil(k, T) {
   armFrame(k, T, cam, { core: 3.0 * smooth(17.6, 18.6, k) + 30 * flare * flare, flare, key: 0.9 * smooth(18.5, 21, k), env: 1.0, unfold: smooth(18.2, 19.5, k), exposure: 1.0 + 1.5 * flare, lift: smooth(33.5, 34.1, k) * 0.9, ...(DBG().ap || {}) });
 }
 
+// staircase driver
+const SUN_DIR = norm([0.22, 0.74, 1.25]);
+function stepTop(j, fx, fz) { return [ST.wd * fx, j * ST.rise + 0.15, j * ST.run + 0.52 * fz]; }
+function stairFrame(k, T, cam, p) {
+  const q = project(cam, [SUN_DIR[0] * 1000 + cam.pos[0], SUN_DIR[1] * 1000 + cam.pos[1], SUN_DIR[2] * 1000 + cam.pos[2]]);
+  const rays = q ? [q[0] / W, 1 - q[1] / H, p.rays ?? 0.3] : [0.5, 0.5, 0];
+  GL.frame({ name: "ch1_stairs", fs: SHADERS.ch1_stairs, scale: SC(0.55, 1.5),
+    uniforms: { uTime: T, ...camUniforms(cam), uA: [ST.rise, ST.run, ST.wd, p.sun], uB: [p.sea ?? -3.4, 0, p.beam ?? 1, 0], uD: [...SUN_DIR, fin() ? 1 : 0] } },
+    { bloom: p.bloom ?? 0.6, thresh: 1.0, exposure: p.exposure ?? 1.0, rays, letterbox: LB, vignette: 0.55, grain: 0.03, lift: p.lift ?? 0, fade: p.fade ?? 1, t: T });
+  blit();
+}
+function stairCam(k) {
+  // 34–43: low beside the first steps while the names appear; 43–54: the camera lifts its head up the endless flight
+  const u = easeIO(clamp((k - 34) / 9.5));
+  let pos = lerp3([6.8, 1.5, -4.8], [6.3, 2.1, -3.2], u), at = lerp3([0, 2.7, 5.0], [0, 3.1, 5.8], u), fov = 1.18;
+  const v = easeIO(clamp((k - 43) / 10.5));
+  if (v > 0) { pos = lerp3(pos, [3.6, 3.2, -0.5], v); at = lerp3(at, [0, 60 * ST.rise, 60 * ST.run], easeIO(clamp((k - 43.2) / 9.5))); fov = lerp(1.18, 1.1, v); }
+  return CAM(pos, at, fov);
+}
+const STAIR_LABELS = [["개미", 1, 0.6, 35.2], ["닭", 3, 0.55, 36.8], ["침팬지", 6, 0.55, 38.4], ["보통 사람", 9, 0.25, 40.2], ["아인슈타인", 9, 0.9, 40.9]];
+function sceneStairs(k, T) {
+  let cam = stairCam(k); if (DBG().scam) cam = CAM(...DBG().scam);
+  const white = smooth(52.2, 54.2, k);
+  stairFrame(k, T, cam, { sun: 1.0 + 0.6 * smooth(44, 51, k) + 5 * white * white, exposure: 1.0 + 0.8 * white, lift: smooth(53.2, 54.3, k), rays: 0.25 + 0.35 * smooth(44, 52, k), ...(DBG().sp || {}) });
+  // names on the steps, stuck in 3D
+  const fade = 1 - smooth(45, 47.5, k);
+  pic(() => STAIR_LABELS.forEach(([s2, j, fx, t0], i) => {
+    const a = smooth(t0, t0 + 0.9, k) * fade; if (a <= 0) return;
+    const P = project(cam, stepTop(j, fx, -0.55)); if (!P) return;
+    const isE = i === 4, isH = i === 3;
+    const tx = P[0] + (isH ? -120 : isE ? 120 : 70), ty = P[1] - (isH ? 120 : isE ? 150 : 105);
+    label(s2, tx, ty, P[0], P[1], a, 30);
+  }));
+}
+
 // ---------------------------------------------------------------- the chapter
 const LIGHT = [2.0, 26, 3.0];
 const DBG = () => window.CH1DBG || {};
@@ -449,6 +568,7 @@ chapter("ch1", 66, (k, T) => {
   if (k < 17.7) sceneBoard(k, T);
   else if (k < 18.3) { sceneBoard(k, T); const tmp = snapshot(); sceneArmil(k, T); o.save(); o.globalAlpha = 1 - smooth(17.7, 18.3, k); o.drawImage(tmp, 0, 0); o.restore(); }
   else if (k < 34.2) sceneArmil(k, T);
+  else if (k < 54.2) { sceneStairs(k, T); if (k < 34.9) { o.save(); o.globalAlpha = 1 - smooth(34.2, 34.9, k); o.fillStyle = "#fff8ec"; o.fillRect(0, BAR, W, H - 2 * BAR); o.restore(); } }
   chapterCard(k, "I", "세 개의 단어");
   caption(k, 7.0, 11.4, (a, u) => capB("좁은 AI — 한 가지만 잘하는 천재", a, u));
   caption(k, 12.0, 17.2, (a, u) => capB("체스는 세계 최강. 하지만 커피 한 잔도 못 탄다", a, u));
@@ -456,6 +576,10 @@ chapter("ch1", 66, (k, T) => {
   caption(k, 23.6, 26.8, (a, u) => capB("사람만큼 해내는 지능", a, u));
   caption(k, 27.6, 33.4, (a, u) => capT("OpenAI 헌장", a, u));
   caption(k, 27.6, 33.4, (a, u) => capB("“대부분의 경제적 가치가 있는 일에서 인간을 능가하는 시스템”", a, u));
+  caption(k, 42.8, 45.6, (a, u) => capB("ASI — 모든 분야에서", a, u));
+  caption(k, 45.8, 48.9, (a, u) => capB("인류 최고의 천재보다 훨씬 뛰어난 지능", a, u));
+  caption(k, 49.1, 51.8, (a, u) => capB("개미가 인간을 이해할 수 없듯이", a, u));
+  caption(k, 52.0, 55.2, (a, u) => capB("우리는 그것을 이해할 수 없을지도 모른다", a, u));
 });
 // copy of the current 2D frame (used under cross-dissolves)
 let SNAP = null;

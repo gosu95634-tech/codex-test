@@ -233,7 +233,7 @@ void main(){
     const s = IGN.map(t0 => k - t0);
     const L = norm([0.78, 0.62, -0.1]);
     const topG = 0.35 + 0.65 * smooth(4, 9, k) + 1.4 * smooth(19.5, 22.4, k);
-    const tq = project(cam, sub(cam.pos, [0, -ST.R * 100, -ST.D * 100]).map((v, i) => cam.pos[i] + [0, ST.R, ST.D][i] * 100));
+    const td = norm([0, ST.R, ST.D]), tq = project(cam, [cam.pos[0] + td[0] * 300, cam.pos[1] + td[1] * 300, cam.pos[2] + td[2] * 300]);
     GL.frame({ name: PRE + "stairs", fs: STAIRS, scale: SC(0.55, 1.5), textures: { uTxt: riserTex() },
       uniforms: { uTime: T, ...camUniforms(cam), uA: [ST.R, ST.D, ST.WD, ST.HB], uB: [s[0], s[1], s[2], lev], uC: [ST.K0, topG, T * 0.004, 0], uD: [...L, 2.0], uQ: Qf() } },
     { bloom: 0.55 + 0.2 * smooth(19.5, 22.4, k), thresh: 1.0, exposure: 1.0 + 0.5 * smooth(20.2, 22.4, k), rays: tq ? [tq[0] / W, 1 - tq[1] / H, 0.3 + 0.3 * smooth(19.5, 22, k)] : [0.5, 1.2, 0.2], letterbox: LB, vignette: 0.55, t: T, lift: extra.lift ?? 0 });
@@ -278,11 +278,13 @@ float leafRelief(vec2 q, out float seal){
   if(pid==1 && din>0.){ // the seal: carved grooves that hold light, centred on the seam
     vec2 d=vec2(q.x, q.y-5.15); float r=length(d); float a=atan(d.y,d.x);
     float g=exp(-pow((r-1.78)/.03,2.)) + exp(-pow((r-1.5)/.022,2.)) + exp(-pow((r-.5)/.028,2.)) + exp(-pow((r-.26)/.018,2.));
-    float cell=a*28./6.2831853; float ci=floor(cell); float fx=fract(cell)-.5; float hh=hash12(vec2(ci,3.));
-    float bar=smoothstep(.13,.07,abs(fx))*smoothstep(1.53,1.56,r)*smoothstep(1.75,1.72,r)*step(.3,hh);
-    float bar2=smoothstep(.1,.05,abs(fract(a*8./6.2831853)-.5))*smoothstep(.52,.55,r)*smoothstep(1.48,1.45,r)*.0;
-    float rays=smoothstep(.06,.02,abs(fract(a*12./6.2831853+.5)-.5))*smoothstep(.55,.6,r)*smoothstep(1.45,1.38,r);
-    seal=clamp(g+bar+rays*.8,0.,1.);
+    float cell=a*40./6.2831853; float ci=floor(cell); float fx=fract(cell)-.5; float hh=hash12(vec2(ci,3.)), hh2=hash12(vec2(ci,9.));
+    float bar=smoothstep(.16,.08,abs(fx))*smoothstep(1.55+hh2*.06,1.58+hh2*.06,r)*smoothstep(1.74-hh*.08,1.71-hh*.08,r)*step(.25,hh);
+    vec2 ad=abs(d);
+    float dia=exp(-pow((ad.x+ad.y-1.42)/.018,2.)), sqr=exp(-pow((max(ad.x,ad.y)-1.005)/.018,2.));
+    float star=(dia+sqr)*smoothstep(1.47,1.42,r)*smoothstep(.5,.56,r);
+    float dots=smoothstep(.05,.03,length(vec2(fract(a*16./6.2831853)-.5, (r-1.62)*2.6)*vec2(.5,1.)))*0.;
+    seal=clamp(g+bar+star,0.,1.);
     h+=.25*exp(-pow((r-1.64)/.15,2.));
     h-=.55*seal;
     // straps of light across the leaves above and below the seal
@@ -299,19 +301,19 @@ float leaf(vec3 p, out vec2 rq, out float lz){
   vec3 l=vec3(dx*c+dz*s, m.y, -dx*s+dz*c);
   rq=vec2(HW-l.x, l.y); lz=l.z;
   float b=sdBox(l-vec3(HW*.5, HS*.5, -TH*.5), vec3(HW*.5-.004, HS*.5, TH*.5));
-  if(b<.25 && l.z<-TH+.2){ float sl; b-=.085*leafRelief(rq, sl); return b*.6; }
+  if(b<.25 && l.z<-TH+.2){ float sl; b-=.10*leafRelief(rq, sl); return b*.55; }
   return b; }
 float floorH(float z){ return z>-7.? 0. : -.26*ceil((-7.-z)/.78); }
 float mapG(vec3 p, out int mat){
   // floor + steps
-  float d=(p.y-floorH(p.z))*.75; mat=0;
+  float d=max((p.y-floorH(p.z))*.75, p.z-1.6); mat=0;
   // wall with stepped, arched orders
-  float wall=sdBox(p-vec3(0.,22.,-.45), vec3(40.,22.,1.95));
-  vec2 xy=p.xy; float carve=1e9;
-  for(int j=0;j<3;j++){ float w=4.65-.55*float(j); float z0=ZW+.8*float(j), z1=z0+.8;
-    carve=min(carve, max(opening2(xy,w), max(z0-p.z, p.z-z1))); }
-  carve=min(carve, max(opening2(xy,HW), max(ZW+2.39-p.z, p.z-1.6)));
-  wall=max(wall, -carve);
+  vec2 xy=p.xy;
+  float wall=max(sdBox(p-vec3(0.,22.,-.45), vec3(40.,22.,1.95)), -opening2(xy,4.65));
+  // receding orders as solid rings (no internal boundaries in the empty doorway)
+  for(int j=1;j<=3;j++){ float wo=4.65-.55*float(j-1), wi=j<3? 4.65-.55*float(j) : HW; float z0=j<3? ZW+.8*float(j) : -.01;
+    float ring=max(max(opening2(xy,wo), -opening2(xy,wi)), max(z0-p.z, p.z-1.5));
+    wall=min(wall, ring); }
   // tympanum fills the arch above the leaves, set back
   float ty=max(max(length(vec2(p.x,p.y-HS))-HW-.02, HS-p.y), max(.38-p.z, p.z-1.5));
   if(ty<.3){ float a=atan(p.y-HS,p.x); float r=length(vec2(p.x,p.y-HS));
@@ -349,17 +351,17 @@ float leakAt(vec2 xy){
 float sheet(vec3 p){
   float dz=max(ZF-p.z,0.); float fall=1./(1.+dz*.22);
   float wS=.035+dz*.075;
-  float s=exp(-pow(p.x/wS,2.))*(.06/wS+.4)*step(0.,p.y)*smoothstep(HS+dz*.75+.2, HS-.6, p.y);
-  float wH=.03+dz*.06;
-  float h=exp(-pow((abs(p.x)-HW-dz*.03)/wH,2.))*(.02/wH+.1)*step(0.,p.y)*smoothstep(HS+.2,HS-.4,p.y);
-  float tp=exp(-pow((p.y-HS-dz*.04)/wH,2.))*(.02/wH+.1)*smoothstep(HW+.3+dz*.05,HW-.2,abs(p.x));
-  return (s+h*.7+tp*.7)*fall; }
+  float s=exp(-pow(p.x/wS,2.))*(.05/wS)*step(0.,p.y)*smoothstep(HS+dz*.6+.2, HS-.6, p.y);
+  float wH=.025+dz*.04;
+  float h=exp(-pow((abs(p.x)-HW-dz*.02)/wH,2.))*(.012/wH)*step(0.,p.y)*smoothstep(HS+.2,HS-.4,p.y);
+  float tp=exp(-pow((p.y-HS-dz*.03)/wH,2.))*(.012/wH)*smoothstep(HW+.3+dz*.03,HW-.2,abs(p.x));
+  return (s+h+tp)*fall; }
 float beam(vec3 p){
   float dz=max(ZF+TH-p.z,0.); float a=openA();
-  float wx=a+dz*.10, wy=HS+dz*.08;
-  float bx=smoothstep(wx+.35+dz*.06, wx-.35, abs(p.x));
-  float by=smoothstep(wy+.5, wy-.5, p.y)*step(0.,p.y);
-  return bx*by/(1.+dz*.06); }
+  float wx=a+dz*.035, wy=HS+dz*.03;
+  float bx=smoothstep(wx+.25+dz*.03, wx-.25, abs(p.x));
+  float by=smoothstep(wy+.4, wy-.4, p.y)*step(0.,p.y);
+  return bx*by*(a/HW*.8+.2)/(1.+dz*.08); }
 vec3 interior(vec3 ro, vec3 rd){
   vec3 sp=spiralCol(ro, rd, uB.z, uB.y)*uB.y;
   float glare=uA.w;
@@ -385,9 +387,9 @@ void main(){
     } else if(mat==3){ // bronze
       vec2 rq; float lz; leaf(p,rq,lz); float sl; float rh=leafRelief(rq,sl);
       float worn=smoothstep(.75,1.15,rh);
-      alb=mix(vec3(.20,.12,.06), vec3(.62,.42,.22), worn)*(.85+.3*fbm2q(rq*6.));
-      alb=mix(alb, vec3(.05,.035,.025), smoothstep(.45,.2,rh)*.6);
-      metal=1.; rough=mix(.45,.2,worn);
+      alb=mix(vec3(.30,.19,.09), vec3(.85,.60,.32), worn)*(.85+.3*fbm2q(rq*6.));
+      alb=mix(alb, vec3(.06,.04,.025), smoothstep(.45,.15,rh)*.7);
+      metal=.85; rough=mix(.5,.22,worn);
       float br=(uA.y)*(.88+.12*sin(uTime*1.1)+.05*sin(uTime*3.7));
       emit+=sl*vec3(2.6,1.45,.55)*br*(.75+.25*fbm2q(rq*3.+uTime*.2));
     } else { // limestone
@@ -412,12 +414,24 @@ void main(){
         else { c=vec3(clamp(p.x,-HW,HW), HS, ZF-.03); I=.5; }
         vec3 dl=c-p; float dd=length(dl)+1e-3; vec3 Ld=dl/dd;
         float dirW=.3+.7*clamp(-(-Ld.z)*-1.,0.,1.);
-        float E=I*uA.z*closed/(dd*.8+.12)*exp(-dd*.1);
+        float E=I*uA.z*closed/(dd*.8+.12)*exp(-dd*.22);
         float nl=max(dot(n,Ld),0.);
         diff+=leakC*E*nl;
         spec+=leakC*E*pow(max(dot(n,normalize(Ld+V)),0.), mix(8.,90.,1.-rough))*nl*2.;
       }
     }
+    // the seal glows and lights the bronze around it
+    if(uA.y>.01 && p.z<ZF+.3){
+      vec2 sc=vec2(0.,5.15); vec2 rel=p.xy-sc; float rr=length(rel);
+      vec3 c=vec3(sc+rel/max(rr,1e-3)*clamp(rr,.5,1.78), ZF-.06);
+      vec3 dl=c-p; float dd=length(dl)+1e-3; vec3 Ld=dl/dd;
+      float E=uA.y*.55/(dd*1.5+.1)*exp(-dd*.4);
+      float nl=max(dot(n,Ld),0.);
+      diff+=vec3(1.,.7,.35)*E*nl;
+      spec+=vec3(1.,.7,.35)*E*pow(max(dot(n,normalize(Ld+V)),0.), mix(8.,90.,1.-rough))*nl*2.;
+    }
+    { vec3 Lm=normalize(vec3(-.25,.85,-.45)); float nl=max(dot(n,Lm),0.);
+      diff+=vec3(.035,.042,.06)*nl; spec+=vec3(.035,.042,.06)*pow(max(dot(n,normalize(Lm+V)),0.),30.)*nl; }
     // the open doorway: an area light behind the leaves
     if(uA.x>.001){
       vec3 c=vec3(clamp(p.x,-a,a), clamp(p.y,.2,HS), ZF+TH+.2);
@@ -459,7 +473,7 @@ void main(){
       dn*=.6+.8*fbm2q(vec2(p.x*1.6,p.y*.35)+3.);
       float ls=closed>0.? sheet(p)*uA.z*closed : 0.;
       float lb=uA.x>.001? beam(p)*uA.w : 0.;
-      acc+=(leakC*ls*.9 + vec3(1.,.88,.7)*lb*.18)*dn*dt*uB.x;
+      acc+=(leakC*ls*.5 + vec3(1.,.88,.7)*lb*.06)*dn*dt*uB.x;
     }
     col+=acc;
   }
@@ -473,17 +487,17 @@ void main(){
     let v = 0;
     if (closedAmt > 0) {
       const wS = 0.035 + dz * 0.075;
-      v += Math.exp(-Math.pow(x / wS, 2)) * (0.06 / wS + 0.4) * (y > 0 ? 1 : 0) * (1 - smooth(G4.HS - 0.6, G4.HS + dz * 0.75 + 0.2, y)) * fall * closedAmt;
-      const wH = 0.03 + dz * 0.06;
-      v += 0.7 * Math.exp(-Math.pow((Math.abs(x) - G4.HW - dz * 0.03) / wH, 2)) * (0.02 / wH + 0.1) * fall * closedAmt * (y > 0 && y < G4.HS ? 1 : 0);
+      v += Math.exp(-Math.pow(x / wS, 2)) * (0.05 / wS) * (y > 0 ? 1 : 0) * (1 - smooth(G4.HS - 0.6, G4.HS + dz * 0.6 + 0.2, y)) * fall * closedAmt;
+      const wH = 0.025 + dz * 0.04;
+      v += Math.exp(-Math.pow((Math.abs(x) - G4.HW - dz * 0.02) / wH, 2)) * (0.012 / wH) * fall * closedAmt * (y > 0 && y < G4.HS ? 1 : 0);
     }
     return v;
   }
   function beamJS(x, y, z, open) {
     if (open <= 0) return 0;
     const dz = Math.max(G4.ZF + G4.TH - z, 0), a = G4.HW * (1 - Math.cos(open));
-    const wx = a + dz * 0.1, wy = G4.HS + dz * 0.08;
-    return (1 - smooth(wx - 0.35, wx + 0.35 + dz * 0.06, Math.abs(x))) * (1 - smooth(wy - 0.5, wy + 0.5, y)) / (1 + dz * 0.06);
+    const wx = a + dz * 0.035, wy = G4.HS + dz * 0.03;
+    return (1 - smooth(wx - 0.25, wx + 0.25 + dz * 0.03, Math.abs(x))) * (1 - smooth(wy - 0.4, wy + 0.4, y)) * (a / G4.HW * 0.8 + 0.2) / (1 + dz * 0.08);
   }
   function drawMotes(cam, T, leak, interiorI, open, alpha = 1) {
     const closedAmt = 1 - smooth(0, 0.06, open);
@@ -491,7 +505,7 @@ void main(){
       o.save(); o.globalCompositeOperation = "lighter";
       for (const m of MOTES) {
         const px = m[0] + 0.35 * Math.sin(T * 0.11 + m[3]) + 0.12 * Math.sin(T * 0.37 + m[3] * 3.1);
-        const py = m[1] + 0.25 * Math.sin(T * 0.07 + m[3] * 1.7) + ((T * 0.03 * m[4]) % 1.2) - 0.6;
+        const py = m[1] + 0.35 * Math.sin(T * 0.05 + m[3] * 1.7) + 0.1 * Math.sin(T * 0.21 + m[3] * 4.1);
         const pz = m[2] + 0.3 * Math.cos(T * 0.09 + m[3] * 2.3);
         const q = project(cam, [px, py, pz]); if (!q || q[2] < 0.4) continue;
         const b = (sheetJS(px, py, pz, open, closedAmt) * leak * 0.9 + beamJS(px, py, pz, open) * interiorI * 0.12) * alpha;
@@ -514,7 +528,7 @@ void main(){
   function drawGateSealed(k, T, extra = {}) { // k = chapter time, 22–40
     const u = clamp((k - 21.6) / 18.4);
     const e = easeIO(u);
-    const cam = camLook([lerp(0.9, 0.25, e), lerp(1.35, 1.6, e), lerp(-21, -15.2, e)], [lerp(0.3, 0.05, e), lerp(6.3, 5.9, e), 0], 1.22);
+    const cam = camLook([lerp(0.8, 0.3, e), lerp(1.2, 2.1, e), lerp(-17.5, -9.6, e)], [lerp(0.3, 0.05, e), lerp(6.5, 5.3, e), 0], lerp(1.02, 1.2, e));
     const breathe = 0.9 + 0.1 * Math.sin(T * 0.9) + 0.04 * Math.sin(T * 2.3);
     const leak = (0.8 + 0.25 * smooth(28, 38, k)) * breathe;
     const P = { open: 0, seal: 0.9 + 0.3 * smooth(30, 39, k), leak, inner: 0, dust: 1.0 };
@@ -540,15 +554,15 @@ void main(){
     float t=-ro.y/rd.y; vec3 p=ro+rd*t;
     vec2 uv=vec2((uD.x-p.x)/(2.*uD.x), (p.z+uD.y)/(2.*uD.y));
     float coc=abs(t-uB.y)*uB.z;
-    float lod=clamp(log2(1.+coc*900.),0.,6.);
-    float sharp=1.-smoothstep(.0,.004,coc);
+    float lod=clamp(log2(1.+coc*70.),0.,5.);
+    float sharp=1.-smoothstep(.0,.05,coc);
     // paper surface
     vec2 pp=p.xz; float e=.0025;
     float h0=pH(pp), hx=pH(pp+vec2(e,0.)), hz=pH(pp+vec2(0.,e));
     float amp=mix(.15,1.,sharp);
     vec3 n=normalize(vec3(-(hx-h0)/e*.010*amp, 1., -(hz-h0)/e*.010*amp));
     float mott=fbm2(pp*1.6+4.), mott2=fbm2q(pp*7.);
-    vec3 alb=mix(vec3(.70,.57,.38), vec3(.80,.69,.50), mott)*(.92+.12*mott2);
+    vec3 alb=mix(vec3(.72,.63,.48), vec3(.84,.77,.62), mott)*(.92+.12*mott2);
     float fox=smoothstep(.72,.8,fbm2q(pp*9.+11.))*.35+smoothstep(.8,.86,fbm2q(pp*3.+2.))*.25;
     alb=mix(alb, vec3(.45,.30,.16), fox);
     vec2 eu=min(uv,1.-uv); float edge=min(eu.x*1.4,eu.y);
@@ -580,7 +594,7 @@ void main(){
     // light: candle from the left, flickering; dim cool fill
     vec3 Lp=vec3(1.5,.55,-.35); vec3 dL=Lp-p; float dd=length(dL); vec3 L=dL/dd;
     float fl=uB.x*(.85+.1*sin(uTime*13.)+.08*sin(uTime*7.3+1.)+.06*vn2(vec2(uTime*9.,0.)));
-    vec3 candle=vec3(1.,.64,.32)*fl*2.2/(dd*dd*.5+.4);
+    vec3 candle=vec3(1.,.74,.48)*fl*1.5/(dd*dd*.5+.4);
     float dif=max(dot(n,L),0.);
     col=alb*(candle*dif + vec3(.012,.013,.018));
     col+=candle*pow(max(dot(n,normalize(L-rd)),0.),30.)*im*.25;   // a little sheen on wet-looking ink
@@ -601,8 +615,8 @@ void main(){
   const PAP = { X0: 1.4, Z0: 1.0, CW: 2048, CH: 1463 };
   const papUV = (cx, cy) => [cx / PAP.CW, 1 - cy / PAP.CH];
   const papW = (cx, cy) => { const [u, v] = papUV(cx, cy); return [PAP.X0 - u * 2 * PAP.X0, 0, -PAP.Z0 + v * 2 * PAP.Z0]; };
-  const STRIKE = [300, 640, 1100, 590];
-  const GRAPH = { cx: 1470, cy: 700, s: 92 };
+  const STRIKE = [0, 0, 0, 0];
+  const GRAPH = { cx: 1610, cy: 700, s: 92 };
   let inkCanvas = null;
   function inkTex() {
     if (!inkCanvas) {
@@ -613,13 +627,14 @@ void main(){
       const pen = (s, px, py, size, font, col, rot = 0) => { x.save(); x.translate(px, py); x.rotate(rot); x.font = `${size}px "${font}"`; x.fillStyle = col; x.fillText(s, 0, 0); x.restore(); };
       // the inequality, written by hand (each glyph a little off the line)
       const red = "rgb(255,0,0)";
-      let cx = 330; const base = 690;
+      let cx = 170; const base = 690;
       const glyphs = [["u", 170], ["(", 170], ["n", 170], [")", 170], [" ", 170], ["≤", 150, "SerifL"], [" ", 170], ["n", 170]];
       for (const [g, sz, f] of glyphs) { x.font = `${sz}px "${f || "CormI"}"`; const w = x.measureText(g).width; pen(g, cx, base + (R() - 0.5) * 6 + (f ? -6 : 0), sz, f || "CormI", red, (R() - 0.5) * 0.05); cx += w + 4; }
       let ex = cx + 6; const eb = base - 96;
       for (const g of ["1", " ", "+", " ", "c", "/", "log", " ", "log", " ", "n"]) { x.font = '84px "CormI"'; const w = x.measureText(g).width; pen(g, ex, eb + (R() - 0.5) * 5, 84, "CormI", red, (R() - 0.5) * 0.06); ex += w + 2; }
+      STRIKE[0] = 140; STRIKE[1] = base - 52; STRIKE[2] = ex + 30; STRIKE[3] = base - 92;
       // definition, smaller, beneath
-      pen("u(n) : the most unit distances among n points", 340, 880, 54, "CormI", "rgb(0,0,255)", -0.006);
+      pen("u(n) : the most unit distances among n points", 190, 880, 54, "CormI", "rgb(0,0,255)", -0.006);
       pen("1946.", 1640, 250, 70, "CormI", "rgb(0,0,255)", -0.02);
       // unit-distance graph: a patch of the triangular lattice (all edges the same length)
       const pts = [];
@@ -639,6 +654,7 @@ void main(){
   }
   const EMBERS = (() => { const r = rng(4646); return Array.from({ length: 160 }, () => [r(), r(), r(), r(), r()]); })();
   function drawPaper(k, T, extra = {}) { // k = chapter time, 40–50
+    const tex = inkTex();
     const u = clamp((k - 39.6) / 10.8), e = easeIO(u);
     const focusW = papW(1000, 690);
     const pos = [focusW[0] + lerp(0.38, 0.05, e), lerp(1.0, 0.82, e), focusW[2] + lerp(-1.02, -0.86, e)];
@@ -654,7 +670,7 @@ void main(){
     const candle = 1.0 + 0.25 * smooth(46, 47, k);
     const fadeIn = extra.fadeIn ?? smooth(39.95, 41.0, k);
     const gq = project(cam, papW(GRAPH.cx, GRAPH.cy));
-    GL.frame({ name: PRE + "paper", fs: PAPER, scale: SC(0.55, 1.5), textures: { uInk: inkTex() },
+    GL.frame({ name: PRE + "paper", fs: PAPER, scale: SC(0.55, 1.5), textures: { uInk: tex },
       uniforms: { uTime: T, ...camUniforms(cam), uA: [front, sp, flare, burn], uB: [candle, dist, 0.55, 0], uC: [u0, v0, u1, v1], uD: [PAP.X0, PAP.Z0, under, 0], uQ: Qf() } },
     { bloom: 0.55 + 0.25 * smooth(46, 48, k), thresh: 1.1, exposure: 1.0 + 0.35 * smooth(47.5, 50, k), rays: gq ? [gq[0] / W, 1 - gq[1] / H, 0.35 * smooth(46.5, 48, k)] : [0.5, 0.5, 0], letterbox: LB, vignette: 0.65, t: T, fade: fadeIn * (extra.fade ?? 1) });
     blit();
@@ -758,7 +774,7 @@ void main(){
   vec3 L=normalize(vec3(.92,.30,.22)); vec3 lightC=vec3(1.,.86,.68)*2.6*uB.z;
   if(rd.y<0.){
     float t=-ro.y/rd.y; vec3 p=ro+rd*t;
-    float coc=abs(t-uB.x)*uB.y; float lod=clamp(log2(1.+coc*1100.),0.,7.); float sharp=1.-smoothstep(0.,.004,coc);
+    float coc=abs(t-uB.x)*uB.y; float lod=clamp(log2(1.+coc*70.),0.,5.); float sharp=1.-smoothstep(0.,.05,coc);
     vec2 uv=vec2((uD.x-p.x)/(2.*uD.x), (p.z+uD.y)/(2.*uD.y));
     bool on=all(greaterThan(uv,vec2(0.)))&&all(lessThan(uv,vec2(1.)));
     vec3 n=vec3(0,1,0); vec3 alb; float gloss=0.;
@@ -985,14 +1001,16 @@ void main(){ vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
     return camLook([0, y, z], [0, lerp(5.9, 6.6, easeIO(u)), 40], 1.22);
   }
   const openAngle = k => 1.45 * easeIO(clamp((k - 84.4) / 8.2));
+  const glareAt = k => (0.5 + 2.5 * smooth(84.4, 89.5, k) + 9 * smooth(89.5, 93.2, k)) * (1 - smooth(93.2, 97.0, k));
+  const spiralAt = k => smooth(92.5, 96.5, k);
   const spinAt = k => { const s = Math.max(0, k - 92); return 0.02 * s * s + 0.004 * s * s * s; };
   function drawGateOpen(k, T, extra = {}) {
     const cam = openCam(k);
     const open = openAngle(k);
     const seal = (1.2 + 3.0 * smooth(83.0, 83.8, k)) * (1 - smooth(83.8, 85.0, k));
     const leak = (1.0 + 1.6 * smooth(83, 84, k)) * (1 - smooth(84.6, 86, k) * 0.5);
-    const inner = 2.5 + 10 * smooth(84.6, 92.5, k) - 9.6 * smooth(93.2, 97.0, k);
-    const spiral = smooth(92.5, 96.5, k);
+    const inner = glareAt(k);
+    const spiral = spiralAt(k);
     const sq = project(cam, [0, 5, 2]);
     gateFrame(T, cam, { open, seal, leak, inner, dust: 1.0, spiral, spin: spinAt(k) },
       { bloom: 0.62 + 0.25 * smooth(86, 92, k), thresh: 1.0, exposure: 1.0 + 0.25 * smooth(88, 93, k) - 0.2 * smooth(94, 97, k), rays: sq ? [sq[0] / W, 1 - sq[1] / H, 0.25 + 0.3 * smooth(85, 91, k)] : [0.5, 0.5, 0.3], fade: extra.fade ?? 1, lift: (extra.lift ?? 0) + 0.12 * smooth(90.5, 93.5, k) * (1 - smooth(93.5, 96, k)) });
@@ -1001,11 +1019,10 @@ void main(){ vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
   function drawSpiral(k, T, extra = {}) {
     const cam = openCam(Math.min(k, 98));
     const after = Math.max(0, k - 98);
-    cam.pos = [0, 4.8 + after * 0.9, 1.5 + after * 7 + after * after * 0.6];
-    cam.fwd = norm(sub([0, 6.6 + after * 0.1, 40], cam.pos));
-    const glare = 0.6 * (1 - smooth(94, 97.5, k));
+    if (after > 0) { cam.pos = [0, 4.8 + after * 0.5, 1.5 + after * 7 + after * after * 0.6]; cam.fwd = norm(sub([0, 6.6 + after * 0.1, 40], cam.pos)); }
+    const glare = Math.max(0, glareAt(k));
     GL.frame({ name: PRE + "spiral", fs: SPIRALFS, scale: SC(0.55, 1.5),
-      uniforms: { uTime: T, ...camUniforms(cam), uA: [spinAt(k), 1.0, glare, 0], uQ: Qf() } },
+      uniforms: { uTime: T, ...camUniforms(cam), uA: [spinAt(k), spiralAt(k), glare, 0], uQ: Qf() } },
     { bloom: 0.7, thresh: 1.0, exposure: 1.0, rays: [0.5, 0.5, 0.2], letterbox: LB, vignette: 0.6, t: T, fade: (extra.fade ?? 1) * (1 - 0.45 * smooth(101.2, 102, k)) });
     blit();
   }

@@ -39,7 +39,7 @@
   SHADERS.ch5_spiral = COMMON + `
 uniform vec4 uD; uniform vec4 uE;
 const float B=0.30635, NA=2., TAU=6.2831853;
-float erfA(float x){ return tanh(x*(1.1283792+0.1009*x*x)); }
+float erfA(float x){ x=clamp(x,-3.,3.); return tanh(x*(1.1283792+0.1009*x*x)); }
 float dfac(float r){ return .62+.38*pow(r*r+.25,-.45); }
 float gaussSeg(vec3 o, vec3 d, float sig, float t0, float t1){
   float dd=dot(d,d), tc=-dot(o,d)/dd, m2=max(dot(o,o)-tc*tc*dd,0.), k=sqrt(dd)/sig;
@@ -74,7 +74,7 @@ vec3 discAt(vec2 P, float pxw, out float tau, float full){
   float sth=-(1.-uD.z)*df*uD.y, sa=uD.z*B*uD.y;
   float sS=abs(NA/TAU*(sth-sa/B)), sP=NA/TAU*3.42*pxw/r;
   float env=exp(-r/2.3)*(1.-exp(-r*r/.06))*smoothstep(12.,5.,r);
-  float w0=mix(.09,.15,smoothstep(2.,-1.,u)), w=sqrt(w0*w0+sS*sS*.3+sP*sP*.35);
+  float w0=mix(.065,.12,smoothstep(2.,-1.,u)), w=sqrt(w0*w0+sS*sS*.3+sP*sP*.35);
   float d=fract(s)-.5;
   float arm=(exp(-d*d/(w*w))+exp(-(d-1.)*(d-1.)/(w*w))+exp(-(d+1.)*(d+1.)/(w*w)))*w0/w;
   float wc=sqrt(w0*w0*.06+sS*sS*.3+sP*sP*.35); float crest=exp(-d*d/(wc*wc))*sqrt(w0*.245/wc);
@@ -84,7 +84,7 @@ vec3 discAt(vec2 P, float pxw, out float tau, float full){
   nk/=3.;
   vec3 hot=vec3(1.,.9,.76), gold=vec3(1.,.64,.30), ember=vec3(.8,.34,.13);
   vec3 armC=mix(hot,gold,smoothstep(-.6,.9,u)); armC=mix(armC,ember,smoothstep(1.,2.1,u));
-  vec3 e=armC*(arm*(.25+1.2*nk*nk*1.6)+crest*.9)*env*uE.x*2.4 + vec3(.55,.38,.22)*env*.10*uE.x;
+  vec3 e=armC*(arm*(.18+2.6*nk*nk*nk)+crest*.9)*env*uE.x*2.4 + vec3(.55,.38,.22)*env*.05*uE.x;
   if(full>.5){
     float envS=exp(-r/3.4)*smoothstep(13.,6.,r)*(1.-exp(-r*r/.03));
     float radA=max(.09,.8*pxw/(r*.17)), radB=max(.08,.8*pxw/(r*.075));
@@ -109,14 +109,14 @@ void main(){
   float cF=gaussSeg(ro,rd,.07,0.,ts), cB=tp>0.? gaussSeg(ro,rd,.07,ts,tFar) : 0.;
   float hF=lorSeg(ro,rd,.3,0.,ts),   hB=tp>0.? lorSeg(ro,rd,.3,ts,tFar) : 0.;
   vec3 bulgeC=vec3(1.,.76,.46), coreC=vec3(1.,.94,.84), haloC=vec3(1.,.78,.5);
-  vec3 front=bulgeC*bF*1.1*uE.x + coreC*cF*uE.y*40. + haloC*hF*uE.w*.05;
-  vec3 back =bulgeC*bB*1.1*uE.x + coreC*cB*uE.y*40. + haloC*hB*uE.w*.05;
+  vec3 front=bulgeC*bF*.7*uE.x + coreC*cF*uE.y*40. + haloC*hF*uE.w*.05;
+  vec3 back =bulgeC*bB*.7*uE.x + coreC*cB*uE.y*40. + haloC*hB*uE.w*.05;
   vec3 disc=vec3(0); float tau=0., dum;
   if(tp>0.){ vec3 p=ro+rd*tp; disc=discAt(p.xz, tp*pxa*slant, tau, 1.)*slant; }
   vec3 hzU=vec3(0), hzL=vec3(0); float hh=.3;
   float tU=(hh-ro.y)/rd.y, tL=(-hh-ro.y)/rd.y;
-  if(tU>0.){ vec3 p=ro+rd*tU; hzU=discAt(p.xz, tU*pxa*slant*5.+.15, dum, 0.)*slant*.22; }
-  if(tL>0.){ vec3 p=ro+rd*tL; hzL=discAt(p.xz, tL*pxa*slant*5.+.15, dum, 0.)*slant*.22; }
+  if(tU>0.){ vec3 p=ro+rd*tU; hzU=discAt(p.xz, tU*pxa*slant*5.+.15, dum, 0.)*slant*.09; }
+  if(tL>0.){ vec3 p=ro+rd*tL; hzL=discAt(p.xz, tL*pxa*slant*5.+.15, dum, 0.)*slant*.09; }
   float Td=exp(-tau*min(slant,3.)*.6);
   vec3 col=hzU+front+disc*mix(1.,Td,.75)+Td*(hzL+back+bg);
   fragColor=vec4(col,1.); }`;
@@ -129,11 +129,11 @@ void main(){
   const dfac = r => 0.62 + 0.38 * Math.pow(r * r + 0.25, -0.45);
 
   function spiralCam(k) {
-    const D = 25 * Math.exp(-k / 21) * (1 - 0.82 * easeIn(clamp((k - 28.2) / 1.8)));
+    const D = 25 * Math.exp(-k / 21) * (1 - 0.82 * easeIn(clamp((k - 28.6) / 1.4)));
     const el = lerp(1.02, 0.5, easeIO(clamp(k / 30)));
     const az = 0.5 - 0.35 * easeIO(clamp(k / 30));
     const pos = [D * Math.cos(el) * Math.sin(az), D * Math.sin(el), -D * Math.cos(el) * Math.cos(az)];
-    const at = [0, D * 0.2 * (1 - smooth(3.5, 10, k)), 0];
+    const at = [0, D * 0.4 * (1 - smooth(4, 10.5, k)), 0];
     return look(pos, at, 1.3, 0.24 * easeIn(clamp(k / 30)));
   }
   // embers: 3D sparks orbiting with the spiral and falling inward (log-radius wraps, so the flow never ends)
@@ -153,7 +153,7 @@ void main(){
       const A = emberPos(e, k), Bp = emberPos(e, k - dt);
       const q1 = project(cam, A.p), q0 = project(camP, Bp.p); if (!q1 || !q0) continue;
       if (q1[1] < BAR - 20 || q1[1] > H - BAR + 20 || q1[0] < -40 || q1[0] > W + 40) continue;
-      const z = q1[2], w = clamp(26 / z, 1.2, 9), dof = clamp((4.5 - z) / 3, 0, 1);
+      const z = q1[2], w = clamp(11 / z, 0.7, 4), dof = clamp((4.5 - z) / 3, 0, 1);
       streak(q0, q1, w * (1 + dof * 3), gain * e.b * A.fade * (0.55 - dof * 0.35) * clamp(9 / z, 0.15, 1));
     }
     o.restore();
@@ -161,13 +161,13 @@ void main(){
   function spiralFrame(k, T) {
     const cam = spiralCam(k), fin = FINAL();
     const card = 1 - smooth(4.5, 9, k);
-    const armB = (0.42 + 0.58 * smooth(1, 8, k)) * (1 + 0.55 * smooth(10, 30, k));
-    const dive = smooth(28.4, 30, k);
-    const core = (1.1 + 1.6 * smooth(6, 30, k)) * (1 + 14 * easeIn(dive));
+    const armB = (0.32 + 0.68 * smooth(1.5, 8.5, k)) * (1 + 0.3 * smooth(10, 30, k));
+    const dive = smooth(29.0, 30, k);
+    const core = (0.9 + 1.1 * smooth(6, 30, k)) * (1 + 14 * easeIn(dive));
     const q = project(cam, [0, 0, 0]), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
     GL.frame({ name: "ch5_spiral", fs: SHADERS.ch5_spiral, scale: SC(0.55, 1.5),
-      uniforms: { uTime: T, ...camUniforms(cam), uD: [Omega(k), omega(k) * SHUT, BETA, fin ? 1 : 0], uE: [armB, core, 1.25, 0.7 + 1.6 * smooth(8, 30, k) + 6 * dive] } },
-      { bloom: 0.55 + 0.25 * smooth(12, 30, k), thresh: 1.0, exposure: 0.95 + 0.2 * smooth(8, 30, k) - 0.25 * card, rays: [rx, ry, 0.18 + 0.3 * smooth(10, 30, k) + 0.5 * dive],
+      uniforms: { uTime: T, ...camUniforms(cam), uD: [Omega(k), omega(k) * SHUT, BETA, fin ? 1 : 0], uE: [armB, core, 1.8, 0.35 + 0.8 * smooth(8, 30, k) + 6 * dive] } },
+      { bloom: 0.42 + 0.2 * smooth(12, 30, k), thresh: 1.2, exposure: 0.92 + 0.12 * smooth(8, 30, k) - 0.32 * card, rays: [rx, ry, 0.18 + 0.3 * smooth(10, 30, k) + 0.5 * dive],
         letterbox: LB, vignette: 0.62, lift: 0.95 * Math.pow(dive, 2.2), fade: smooth(0, 1.4, k), t: T });
     blit();
     pic(() => drawEmbers(k, cam, (0.35 + 0.65 * smooth(4, 12, k)) * (1 - dive)));
@@ -187,57 +187,64 @@ float map(vec3 p, out float kk){
   for(int o=-1;o<=1;o++){ float kc=clamp(k+float(o),0.,4000.); float di=slab(p,kc); if(di<d){ d=di; kk=kc; } }
   return d; }
 float mapS(vec3 p){ float k; return map(p,k); }
+float fbm3(vec3 p){ return .5*noise(p)+.25*noise(p*2.03+vec3(1.7,9.2,3.1))+.125*noise(p*4.1+vec3(5.3,1.1,7.9)); }
 vec3 sky(vec3 rd, vec3 L){
-  float s=max(dot(rd,L),0.);
-  vec3 c=mix(vec3(.007,.007,.016), vec3(.035,.03,.055), smoothstep(-.4,.7,rd.y));
-  c+=stars(rd,.4*(1.-smoothstep(.3,.95,s))*(1.-clamp(uD.x*.4,0.,1.)));
-  c+=vec3(1.,.92,.78)*pow(s,400.)*40.*(.5+uD.x) + vec3(1.,.8,.55)*pow(s,30.)*1.1*(.35+uD.x) + vec3(1.,.66,.38)*pow(s,5.)*.14*(.3+uD.x);
+  float s=max(dot(rd,L),0.), sw=.5+uD.x;
+  vec3 c=mix(vec3(.003,.003,.007), vec3(.009,.009,.017), smoothstep(-.4,.7,rd.y));
+  c+=stars(rd,.55*(1.-smoothstep(.75,.98,s))*(1.-clamp(uD.x*.3,0.,.9)));
+  c+=vec3(1.,.95,.86)*pow(s,6000.)*14.*sw + vec3(1.,.84,.6)*pow(s,600.)*1.1*sw + vec3(1.,.72,.45)*pow(s,70.)*.22*sw + vec3(.75,.5,.3)*pow(s,9.)*.035*sw;
   return c; }
 float softShadow(vec3 ro, vec3 rd){ float res=1., t=.03;
   for(int i=0;i<20;i++){ float h=mapS(ro+rd*t); res=min(res,7.*h/t); t+=clamp(h,.03,.4); if(res<.01||t>5.) break; }
   return clamp(res,0.,1.); }
-vec4 cloudSea(vec3 ro, vec3 rd, vec3 L){
-  vec3 acc=vec3(0); float T=1.;
-  for(int l=0;l<3;l++){ float y=uB.x-float(l)*2.2; if(rd.y>-1e-3) break; float t=(y-ro.y)/rd.y; if(t<0.) continue;
-    vec3 p=ro+rd*t; vec3 q=vec3(p.xz*.03,float(l)*3.1);
-    float n=fbm(q+vec3(0.,0.,uTime*.01)); float dens=smoothstep(.42,.78,n-float(l)*.04);
-    float lit=clamp(.5+(n-fbm(q+vec3(L.x,L.z,0.)*.05))*9.,0.,1.);
-    vec3 c=mix(vec3(.05,.045,.06), vec3(1.,.8,.55)*(.55+uD.x*.6), lit*.8+.1)*(1.-float(l)*.25);
-    float fogd=1.-exp(-t*.006);
-    c=mix(c, vec3(.5,.4,.3)*(.25+uD.x*.4), fogd);
-    float a=dens*.85; acc+=T*a*c; T*=1.-a; }
-  return vec4(acc,T); }
+// luminous mist that hangs around the staircase like a canyon of cloud, lit from the light above
+float mistDens(vec3 p){
+  float dl=length(vec2(p.x, p.y-p.z*uA.x/uA.y+1.));
+  float m=smoothstep(2.6,7.,dl)*smoothstep(26.,12.,dl);
+  if(m<=0.) return 0.;
+  float n=fbm3(p*vec3(.09,.16,.05)+vec3(0.,0.,uTime*.02));
+  return m*smoothstep(.42,.72,n)*.35; }
 void main(){
   float jit=hash12(gl_FragCoord.xy+fract(uTime*3.17)*113.);
   vec3 ro=uCamPos-uV*jit, rd=camRay(gl_FragCoord.xy);
   vec3 L=normalize(vec3(0.,uA.x,uA.y));
+  float s=max(dot(rd,L),0.);
   vec3 col=sky(rd,L);
-  vec4 cs=cloudSea(ro,rd,L); col=col*cs.w+cs.rgb;
   int NS=uD.z>.5? 200 : 120; float t=.05, kk; bool hit=false;
-  for(int i=0;i<200;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=map(p,kk); if(d<.0007*t){ hit=true; break; } t+=d*.9; if(t>260.) break; }
+  for(int i=0;i<200;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=map(p,kk); if(d<.0007*t){ hit=true; break; } t+=d*.9; if(t>300.) break; }
+  vec3 sunC=vec3(1.,.86,.64)*(1.5+uD.x*1.4);
   if(hit){ vec3 p=ro+rd*t; vec2 e=vec2(.0006*t+.0004,0.); float k2;
     vec3 n=normalize(vec3(map(p+e.xyy,k2)-map(p-e.xyy,k2), map(p+e.yxy,k2)-map(p-e.yxy,k2), map(p+e.yyx,k2)-map(p-e.yyx,k2)));
     vec3 q=p-vec3(0.,kk*uA.x,kk*uA.y);
     float hk=hash12(vec2(kk,3.7));
     vec3 mp=q*vec3(1.1,2.6,1.1)+vec3(hk*40.,0.,kk*1.7);
-    float vn=fbm(mp*.8);
+    float vn=fbm3(mp*.8)*1.3;
     float vein=pow(1.-abs(sin((q.x*1.2+q.z*.8*(hk-.5)*2.+vn*5.)*2.2)),22.);
     float vein2=pow(1.-abs(sin((q.z*2.2-q.x*.5+vn*7.)*3.)),40.)*.7;
-    vec3 base=vec3(.82,.79,.74)*(.88+.12*vn)-vec3(.32,.28,.22)*vein-vec3(.16,.13,.09)*vein2;
+    vec3 base=vec3(.84,.81,.76)*(.86+.14*vn)-vec3(.34,.30,.24)*vein-vec3(.16,.13,.09)*vein2;
     float sh=softShadow(p+n*.004,L);
     float dif=max(dot(n,L),0.)*sh;
-    vec3 sunC=vec3(1.,.86,.64)*(1.5+uD.x*1.6);
-    vec3 amb=vec3(.07,.065,.085)*(.6+.4*n.y)+vec3(.18,.12,.06)*max(-n.y,0.)*(.6+uD.x*.4);
+    vec3 amb=vec3(.022,.021,.03)*(.6+.4*n.y)+vec3(.05,.035,.02)*max(-n.y,0.);
     vec3 c=base*(sunC*dif+amb);
-    if(n.y>.5){ vec3 rf=reflect(rd,n); c+=sky(rf,L)*.10*(.3+.7*sh); }
-    float thin=exp(-(TH-q.y)/.05); c+=vec3(1.,.68,.38)*.22*(1.-max(n.y,0.))*thin*(.5+uD.x);
+    if(n.y>.5){ vec3 rf=reflect(rd,n); c+=sky(rf,L)*.12*(.25+.75*sh); }
+    float thin=exp(-(TH-q.y)/.04); c+=vec3(1.,.66,.36)*.16*(1.-max(n.y,0.))*thin*(.5+uD.x);
     float ex=uA.z-abs(q.x), ez=uA.y*.42-abs(q.z), ey=TH-q.y;
-    float inlay=smoothstep(.022,.0,ey+min(ex,ez)*.8);
-    c+=vec3(1.,.74,.38)*inlay*(1.1+.06*min(kk,60.)*.1)*(1.+uD.x);
-    float fogA=1.-exp(-t*(.007+.03*uD.y));
-    vec3 fogC=mix(vec3(.04,.036,.05), vec3(1.,.84,.6)*(.6+uD.x), pow(max(dot(rd,L),0.),3.)*.85+.08);
+    float inlay=smoothstep(.02,.0,ey+min(ex,ez)*.8);
+    c+=vec3(1.,.72,.36)*inlay*1.3*(1.+uD.x*.6);
+    float fogA=1.-exp(-t*(.006+.03*uD.y));
+    vec3 fogC=vec3(.012,.011,.016)+vec3(1.,.8,.55)*(pow(s,40.)*.9+pow(s,6.)*.06)*(.5+uD.x);
     c=mix(c,fogC,fogA);
     col=c; }
+  // mist: 20 samples, denser near the camera, stopped by the stairs
+  float tEnd=hit? min(t,140.) : 140.; vec3 acc=vec3(0); float Tm=1.;
+  float jm=hash12(gl_FragCoord.yx*.73+fract(uTime*1.37)*57.);
+  float tPrev=.8;
+  for(int i=0;i<20;i++){ float ti=.8*pow(175.,(float(i)+jm)/20.); if(ti>tEnd) break;
+    float dt=ti-tPrev; tPrev=ti; vec3 p=ro+rd*ti; float dn=mistDens(p); if(dn<=0.) continue;
+    float a=1.-exp(-dn*dt*.35);
+    vec3 lc=vec3(.03,.028,.035)+sunC*(.05+pow(s,8.)*.7+pow(s,40.)*1.5)*.5;
+    acc+=Tm*a*lc; Tm*=1.-a; }
+  col=col*Tm+acc;
   col=mix(col, vec3(1.,.88,.7)*(1.5+3.*uD.y), smoothstep(.2,1.,uD.y)*.7);
   fragColor=vec4(col,1.); }`;
 
@@ -252,25 +259,32 @@ void main(){
     const at = [0.15, (kc + 15) * SR + 0.9, (kc + 15) * SRUN];
     return look(pos, at, 1.25, -0.035 + 0.02 * Math.sin(t * 0.29));
   }
+  // gold name plate on a step: hairline leader from the slab edge to the word
+  function stepLabel(s, q, ax, ay, a, size) {
+    o.save(); o.globalAlpha = a; o.strokeStyle = "rgba(243,217,164,0.75)"; o.lineWidth = 1.4;
+    o.beginPath(); o.moveTo(ax, ay); o.lineTo(q[0] - size * 0.3, q[1] + size * 0.62); o.lineTo(q[0] + size * 4.9, q[1] + size * 0.62); o.stroke();
+    o.beginPath(); o.arc(ax, ay, 3.2, 0, 7); o.fillStyle = GOLD; o.fill(); o.restore();
+    line(s, q[0], q[1], { size, color: GOLD, spacing: 0.12, glow: 12, alpha: a, align: "left" });
+  }
   function stairFrame(k, T) {
     const cam = stairCam(k), fin = FINAL();
-    const v = vAt(k), dt = SHUT;
+    const v = vAt(k), dt = SHUT * 0.5;
     const camB = stairCam(k - dt), vel = sub(cam.pos, camB.pos);
     const swell = 0.25 + 0.75 * smooth(31, 44, k) + 2.2 * easeIn(clamp((k - 43) / 7));
     const haze = smooth(43.5, 49.6, k);
     const L = norm([0, SR, SRUN]);
     const sun = project(cam, add3(cam.pos, mul3(L, 1e4))), fx = sun ? sun[0] : W / 2, fy = sun ? sun[1] : H / 2;
     GL.frame({ name: "ch5_stairs", fs: SHADERS.ch5_stairs, scale: SC(0.55, 1.5),
-      uniforms: { uTime: T, ...camUniforms(cam), uA: [SR, SRUN, SWD, 1], uB: [K0 * SR - 9, 0, 0, 0], uD: [swell, haze, fin ? 1 : 0, 0], uV: vel } },
-      { bloom: 0.6 + 0.3 * haze, thresh: 1.05, exposure: 1.0 + 0.5 * haze, rays: [fx / W, 1 - fy / H, 0.3 + 0.35 * smooth(36, 48, k)], letterbox: LB, vignette: 0.55 - 0.3 * haze,
-        lift: Math.max(0.9 * (1 - smooth(30, 31.3, k)), Math.pow(smooth(45.5, 49.7, k), 1.6)), t: T });
+      uniforms: { uTime: T, ...camUniforms(cam), uA: [SR, SRUN, SWD, 1], uD: [swell, haze, fin ? 1 : 0, 0], uV: vel } },
+      { bloom: 0.5 + 0.4 * haze, thresh: 1.2, exposure: 1.0 + 0.5 * haze, rays: [fx / W, 1 - fy / H, 0.06 + 0.2 * smooth(38, 48, k)], letterbox: LB, vignette: 0.6 - 0.3 * haze,
+        lift: Math.max(0.9 * Math.pow(1 - smooth(30, 31.4, k), 1.5), Math.pow(smooth(45.5, 49.7, k), 1.6)), t: T });
     blit();
-    zoomBlur(fx, fy, clamp(0.0016 * v, 0, 0.12) * (1 - haze * 0.5), fin ? 10 : 7);
-    // Einstein's step: a gold label on the outer edge of one slab
-    const anc = [SWD, KE * SR + 0.075, KE * SRUN - SRUN * 0.3], qa = project(cam, anc);
-    if (qa && qa[2] > 0.6) {
-      const z = qa[2], sz = clamp(30 * 9 / z, 24, 64), a = smooth(30, 9, z) * smooth(0.8, 2.2, z);
-      pic(() => label("아인슈타인", qa[0] + 0.9 * sz * 2.6, qa[1] - sz * 2.4, qa[0], qa[1], a, sz));
+    zoomBlur(fx, fy, clamp(0.0022 * v, 0, 0.16) * (1 - haze * 0.5), fin ? 10 : 7);
+    // Einstein's step: a gold name plate on the outer edge of one slab
+    const anc = [SWD, KE * SR + 0.075, KE * SRUN - SRUN * 0.25], qa = project(cam, anc);
+    if (qa && qa[2] > 0.5) {
+      const z = qa[2], sz = clamp(34 * 8 / z, 26, 70), a = smooth(34, 14, z) * smooth(0.6, 1.8, z) * (1 - haze);
+      pic(() => stepLabel("아인슈타인", [qa[0] + sz * 1.6, qa[1] - sz * 2.2], qa[0], qa[1], a, sz));
     }
     bars();
   }
@@ -284,10 +298,10 @@ void main(){
   const ENT5 = `
 uniform mat3 uRing[6]; uniform vec3 uSock; uniform vec3 uLook;
 const int NR=6;
-const float EW=.12, EH=.05;
+const float EW=.1, EH=.04;
 float sdTorus(vec3 p, vec2 t){ vec2 q=vec2(length(p.xz)-t.x,p.y); return length(q)-t.y; }
 float ringR(int i){ return 1.05+float(i)*0.3; }
-float ringr(int i){ return 0.042+float(i)*0.005; }
+float ringr(int i){ return 0.03+float(i)*0.004; }
 float mapE(vec3 p, out int id, out vec3 lp){ float d=1e9; id=-1;
   for(int i=0;i<NR;i++){ vec3 q=uRing[i]*p; float di=sdTorus(q, vec2(ringR(i), ringr(i))); if(di<d){ d=di; id=i; lp=q; } }
   return d; }
@@ -322,18 +336,20 @@ vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, out float tHit){
   float fx=dot(n,r0), fy=dot(n,u0), ff=dot(n,f0);
   float open=uA.x, aper=0.46*open*pow(max(1.-fx*fx/0.7,0.),0.75);
   vec3 L=normalize(vec3(0.,1.,0.));
-  float fil=pow(.5+.5*sin(atan(fy,fx)*36.+acos(clamp(ff,-1.,1.))*30.),16.);
-  float rimV=pow(1.-max(dot(n,-rd),0.),4.);
-  vec3 shell=vec3(.012,.011,.014) + vec3(1.,.72,.36)*fil*.22*smoothstep(-.2,.6,ff)*(.4+.6*uB.x) + vec3(.9,.7,.45)*rimV*.6*(.5+.5*uB.x);
-  float lidLine=smoothstep(.012,0.,abs(abs(fy)-aper))*step(.25,ff)*step(abs(fx),.83)*step(.002,aper);
-  shell+=vec3(1.6,1.05,.5)*lidLine*.8;
+  float lon=atan(fy,fx), lat=acos(clamp(ff,-1.,1.));
+  float eng=exp(-pow(sin(lon*12.)*max(sin(lat),.08)/.012,2.))*smoothstep(.15,.5,lat) + exp(-pow(sin(lat*10.)/.03,2.))*.6;
+  float rimV=pow(1.-max(dot(n,-rd),0.),3.);
+  vec3 shell=vec3(.006,.0055,.008) + spaceCol(reflect(rd,n))*.35 + vec3(1.,.72,.36)*eng*.035*(.4+.6*uB.x) + vec3(1.,.72,.4)*rimV*.45*(.4+.6*uB.x);
+  float seam=max(aper,.0015);
+  float lidLine=smoothstep(.014,0.,abs(abs(fy)-seam))*smoothstep(.2,.35,ff)*smoothstep(.86,.6,abs(fx));
+  shell+=vec3(1.5,1.,.5)*lidLine*(.35+.9*smoothstep(.0,.15,open))*(1.-smoothstep(.6,1.,open)*.5);
   if(ff<0.25 || abs(fy)>aper) return shell;
   vec3 g=normalize(mix(normalize(uLook), normalize(uCamPos-E), uB.y));
   float ang=acos(clamp(dot(n,g),-1.,1.));
   float lidShade=1.-.55*smoothstep(aper*.45,aper,abs(fy));
   vec3 col=vec3(.95,.86,.72)*lidShade*(.6+.4*max(dot(n,normalize(uCamPos-E)),0.));
   float vein=pow(abs(sin(atan(dot(n,cross(g,u0)),dot(n,u0))*14.+ang*9.)),40.)*smoothstep(.3,.6,ang)*.25; col-=vec3(.2,.35,.4)*vein;
-  float irisA=0.42, pupA=0.17;
+  float irisA=0.42, pupA=0.19;
   if(ang<irisA){ vec3 ax=normalize(cross(g,vec3(0,1,0))), ay=cross(ax,g); float a=atan(dot(n,ay),dot(n,ax));
     float r=(ang-pupA)/(irisA-pupA); vec2 pc=vec2(cos(a),sin(a));
     float fibers=fbm(vec3(pc*3.,r*1.2)), fine=noise(vec3(a*90.,r*14.,1.7));
@@ -344,7 +360,7 @@ vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, out float tHit){
     vec3 ic=mix(mid, deep, smoothstep(.35,1.,r)) + pale*streak*(1.-r*.6);
     ic=mix(ic, deep*.35, crypt*.75); ic+=pale*collar*.6; ic*=.82+.36*fibers;
     ic*=1.-.85*smoothstep(.8,1.,r); ic=mix(ic, vec3(.05,.02,.01), smoothstep(.06,0.,r)*.8);
-    col=ic; }
+    col=ic*.55; }
   if(ang<pupA){ col=vec3(.0008)+spaceCol(reflect(rd,n))*.15; }
   vec3 rf=reflect(rd,n); col+=vec3(1.1,1.,.9)*smoothstep(.985,.995,dot(rf,normalize(vec3(-.35,.8,-.45))))*1.6;
   col+=spaceCol(rf)*.25*smoothstep(.2,.42,ang);
@@ -365,8 +381,9 @@ bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, out vec3 ent, ou
   vec3 Lm=normalize(vec3(.3,1.,.2)); float specM=pow(max(dot(n,normalize(Lm-rd)),0.),40.);
   vec3 toP=normalize(-E/S-p); float planet=max(dot(n,toP),0.);
   float lit=uB.x/(1.+dot(p,p)*.08);
-  ent=gold*(diff*1.5*lit+.02) + vec3(1.,.82,.55)*specC*3.5*lit + vec3(.7,.75,.9)*specM*.3 + vec3(1.,.8,.5)*fres*.3*(.4+.6*uB.x) + vec3(.25,.3,.45)*planet*.05;
-  float lights=smoothstep(.5,1.,sin(th*ringR(id)*260.)*sin(ph*3.+1.))*step(.3,abs(ph)); ent+=vec3(2.4,1.7,1.)*pow(lights,8.)*(.6+.4*sin(uD.w*2.+th*90.))*uB.x;
+  float groove=1.-.55*exp(-pow(sin(ph*2.)/.08,2.))*step(.35,abs(ph));
+  vec3 rfl=reflect(rd,n); float envC=pow(max(dot(rfl,Lc),0.),6.);
+  ent=gold*groove*(diff*.65*lit+.008) + vec3(1.,.8,.5)*specC*2.2*lit + gold*envC*.35*lit + vec3(.7,.75,.9)*specM*.12 + gold*fres*.18*(.4+.6*uB.x) + vec3(.2,.25,.4)*planet*.04;
   float isEye; vec3 camL=uRing[id]*((uCamPos-E)/S); vec3 ec=ringEye(lp,id,camL,isEye);
   if(isEye>.75) ent=ec*(.7+.6*diff); else if(isEye>.25) ent*=.35;
   return true; }
@@ -382,7 +399,7 @@ vec3 planet(vec3 p, vec3 n, vec3 rd, vec3 E){
   float cl=fbm(n*7.+vec3(uD.w*.003,0.,0.))*.7+fbm(n*19.)*.3; float cloud=smoothstep(.48,.72,cl);
   vec3 ocean=vec3(.004,.008,.016), ground=mix(vec3(.05,.04,.028), vec3(.085,.07,.045), fbm(n*24.));
   vec3 alb=mix(ocean,ground,land); alb=mix(alb, vec3(.62,.6,.58), cloud*.85);
-  vec3 lc=vec3(1.,.82,.58)*uD.x;
+  vec3 lc=vec3(1.,.82,.58)*uD.x*.45;
   vec3 c=alb*lc*smoothstep(-.02,.3,mu)*max(mu+.05,0.)*1.4;
   c+=vec3(1.,.5,.18)*exp(-pow(mu/.06,2.))*.05*uD.x*(1.-cloud*.6);
   vec3 rf=reflect(rd,n); float sp=max(dot(rf,Ld),0.);
@@ -392,7 +409,7 @@ vec3 planet(vec3 p, vec3 n, vec3 rd, vec3 E){
   vec3 cg=n*520.; vec3 ci=floor(cg); float h=hash13(ci); vec3 cf=fract(cg)-.5;
   float dot1=smoothstep(.3,0.,length(cf-(vec3(hash13(ci+1.),hash13(ci+2.),hash13(ci+3.))-.5)*.5))*step(1.-pop*.9,h);
   float sprawl=pop*pop*.25+pow(fbm(n*60.),3.)*pop*.6;
-  c+=vec3(1.,.62,.26)*(dot1*1.6+sprawl)*night*uD.y*(1.-cloud*.8);
+  c+=vec3(1.,.6,.24)*(dot1*2.6+sprawl*1.4)*night*uD.y*(1.-cloud*.8);
   c+=vec3(.0025,.003,.006);
   return c; }
 void main(){
@@ -402,14 +419,14 @@ void main(){
   vec3 Ldir=normalize(E-ro);
   float tP=1e9; float b=dot(ro,rd), c=dot(ro,ro)-RP*RP, h=b*b-c;
   if(h>0.){ float t=-b-sqrt(h); if(t>0.){ tP=t; vec3 p=ro+rd*t, n=normalize(p); col=planet(p,n,rd,E);
-      float mu=dot(n,normalize(E-p)); float rim=pow(1.-max(dot(n,-rd),0.),3.5);
-      col+=mix(vec3(.10,.14,.26), vec3(1.,.72,.42), smoothstep(-.2,.35,mu))*rim*smoothstep(-.35,.15,mu)*.9*uD.x; } }
+      float mu=dot(n,normalize(E-p)); float rim=pow(1.-max(dot(n,-rd),0.),6.);
+      col+=mix(vec3(.08,.11,.22), vec3(1.,.72,.42), smoothstep(-.2,.35,mu))*rim*smoothstep(-.35,.15,mu)*.35*uD.x; } }
   // atmosphere above the limb
   float tc=-dot(ro,rd); vec3 pc=ro+rd*max(tc,0.); float hc=length(pc)-RP;
   if(tP>1e8 && tc>0.){ vec3 nc=normalize(pc); float mu=dot(nc,normalize(E-pc));
-    float A=exp(-max(hc,0.)/95.); float fw=pow(max(dot(rd,Ldir),0.),6.);
-    vec3 ac=mix(vec3(.12,.17,.32), vec3(1.,.74,.45), smoothstep(-.1,.5,mu)*.6+fw*.4);
-    col+=ac*A*smoothstep(-.45,.2,mu)*(1.+fw*5.)*.9*uD.x; }
+    float A=exp(-max(hc,0.)/70.); float fw=pow(max(dot(rd,Ldir),0.),6.);
+    vec3 ac=mix(vec3(.10,.14,.28), vec3(1.,.74,.45), smoothstep(-.1,.5,mu)*.6+fw*.4);
+    col+=ac*A*smoothstep(-.45,.2,mu)*(1.+fw*4.)*.45*uD.x; }
   float tEye; vec3 eye=greatEye(ro,rd,E,S,tEye);
   vec3 ent; float tEnt; bool entHit=marchEntity(ro,rd,E,S,min(tEye,tP),ent,tEnt);
   if(eye.x>=0. && tEye<tEnt && tEye<tP){ ent=eye; tEnt=tEye; entHit=true; }
@@ -417,11 +434,12 @@ void main(){
   // corona and halo of the core: light that seeps around the great eye
   vec3 oc=ro-E; float tcE=-dot(oc,rd); float dmin=length(oc+rd*tcE);
   float behind=(tP<1e8 && tP<tcE)? 0. : 1.;
-  float occl=(entHit && tEnt<tcE)? .35 : 1.;
+  float occl=(entHit && tEnt<tcE)? 0. : 1.;
   float Re=.66*S;
-  float corona=exp(-max(dmin-Re,0.)/(.035*S))*step(Re*.995,dmin);
-  float halo=lorSeg(oc,rd,.5*S,0.,1e7)*S*.12;
-  col+=vec3(1.,.8,.52)*(corona*1.6+halo*.5)*uA.z*behind*occl;
+  float corona=exp(-max(dmin-Re,0.)/(.018*S))*step(Re*.998,dmin);
+  float x=max(dmin-Re,0.)/S;
+  float halo=exp(-x/.1)*.22+exp(-x/.5)*.03;
+  col+=vec3(1.,.8,.52)*(corona*1.2+halo)*uA.z*behind*occl;
   fragColor=vec4(col,1.); }`;
 
   // geometry of the shot: eye radius 0.165 H on screen, planet radius 0.72 H, limb top 0.215 H below centre
@@ -432,7 +450,7 @@ void main(){
   const OE = [OC[0], OC[1], OC[2] + OD];
   const TO_CAM = [0, 0, -1];
   const REST_LOOK = norm([-0.36, -0.52, -0.77]);
-  const RING_PHASE5 = 383.55;
+  const RING_PHASE5 = 1336.4;          // searched: every ring's near arc stays ≥1.3 eye radii off the pupil for this camera, 50–70 s
   function orbitFrame(k, T) {
     const fin = FINAL();
     // scene clock: runs normally, nearly stops in the silence (60–64), resumes for the gaze
@@ -453,8 +471,8 @@ void main(){
     const flash = 1 - smooth(50, 50.9, k);
     GL.frame({ name: "ch5_orbit", fs: SHADERS.ch5_orbit, scale: SC(0.55, 1.5),
       uniforms: { uTime: 405 + clock, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, 0], uC: [...OE, OS],
-        uD: [1.0 + 0.3 * eyeOpen, 1.0, fin ? 1 : 0, clock], uRing: heavensRings(RING_PHASE5 + clock * 0.018), uSock: sock, uLook: REST_LOOK } },
-      { bloom: 0.55 + 0.4 * flash, thresh: 1.15, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.22 + 0.1 * eyeOpen], letterbox: LB, vignette: 0.6,
+        uD: [1.0 + 0.3 * eyeOpen, 1.0, fin ? 1 : 0, clock], uRing: heavensRings(RING_PHASE5 + (clock - 50) * 0.018), uSock: sock, uLook: REST_LOOK } },
+      { bloom: 0.45 + 0.4 * flash, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.22 + 0.1 * eyeOpen], letterbox: LB, vignette: 0.6,
         lift: 0.55 * Math.pow(flash, 3), fade: 1 - smooth(69.2, 70, k), t: T });
     blit();
   }

@@ -159,14 +159,14 @@ uniform vec4 uPul[8];
 const float RS=(SR*SR+SH*SH)/(2.*SH);
 const vec3 KEYP=vec3(6.,15.,-8.);
 const vec3 KEYAT=vec3(-.5,0.,1.);
-const vec3 COLDP=vec3(-21.,4.,7.);
-const vec3 WARMP=vec3(21.,3.5,-5.);
+const vec3 COLDP=vec3(-36.,2.5,12.);
+const vec3 WARMP=vec3(36.,2.5,-9.);
 const vec3 KEYC=vec3(1.,.9,.77);
 const vec3 COLDC=vec3(.88,.91,1.);
 const vec3 WARMC=vec3(1.,.56,.24);
 const vec3 GOLDC=vec3(1.,.73,.36);
-const vec3 C37=vec3(1.,.88,.64);
-const vec3 C78=vec3(1.,.5,.18);
+const vec3 C37=vec3(1.,.80,.50);
+const vec3 C78=vec3(1.,.46,.15);
 float flick=1.;
 vec4 cellv(vec2 c){ return texelFetch(uBoard, ivec2(int(9.-c.x+.5), int(9.-c.y+.5)), 0); }
 int kindOf(vec4 v){ return int(v.r*255./60.+.5); }
@@ -223,28 +223,30 @@ vec3 env(vec3 d){
   return c; }
 vec3 sky(vec3 rd){
   vec3 c=mix(vec3(.0045,.005,.009), vec3(.0015,.0017,.0035), clamp(rd.y*1.5+.3,0.,1.));
-  c+=COLDC*uG.x*pow(max(dot(rd,normalize(COLDP)),0.),14.)*.35+WARMC*uG.y*flick*pow(max(dot(rd,normalize(WARMP)),0.),14.)*.35;
+  vec3 dc=normalize(COLDP), dw=normalize(WARMP);
+  c+=(COLDC*uG.x*pow(max(dot(rd,dc),0.),6.)+WARMC*uG.y*flick*pow(max(dot(rd,dw),0.),6.))*.06*exp(-abs(rd.y)*6.);
   c+=nebula(rd, vec3(.010,.008,.016), vec3(.05,.032,.012))*.5*smoothstep(-.3,.4,rd.y);
   c+=stars(rd,.22)*smoothstep(-.05,.3,rd.y);
   return c; }
 // the sea of lights far below: the watching world (2 hundred million), spreading out from beneath the board
 vec3 sea(vec3 ro, vec3 rd, out float tS){
   tS=1e4; if(rd.y>-.002||uG.w<=0.) return vec3(0.);
-  const float Y=-30.; float t=(Y-ro.y)/rd.y; tS=t; vec3 p=ro+rd*t;
-  const float cs=1.9; vec2 q=p.xz/cs; vec2 id=floor(q), f=q-id;
+  const float Y=-55.; float t=(Y-ro.y)/rd.y; tS=t; vec3 p=ro+rd*t;
+  const float cs=1.6; vec2 q=p.xz/cs; vec2 id=floor(q), f=q-id;
   float h=hash12(id+.5), h2=hash12(id*1.73+3.1), h3=hash12(id*2.31+7.7);
   vec2 pc=vec2(h2,h3)*.6+.2;
+  float town=smoothstep(.42,.75,fbm(vec3(p.xz*.018,2.3)));         // clusters of light, like towns seen from the sky
   float fp=t/(uFov*uRes.y)/max(-rd.y,.05)/cs;                 // pixel footprint in cells
   float r=max(.05, fp*.9);
   float dd=length(f-pc);
-  float on=step(.42,h)*(.35+.65*h3);
+  float on=step(1.-(.15+.75*town),h)*(.25+.75*h3*h3);
   float pt=on*exp(-dd*dd/(r*r))*(.05*.05)/(r*r);
-  float avg=.58*.67*3.1416*.05*.05;
+  float avg=(.15+.75*town)*.4*3.1416*.05*.05;
   float v=mix(pt, avg, smoothstep(.12,.5,fp));
-  float R=length(p.xz); float spread=smoothstep(uH.w, uH.w-28., R);
+  float R=length(p.xz); float spread=smoothstep(uH.w, uH.w-40., R);
   float tw=.7+.3*sin(uTime*(1.5+h2*2.)+h*60.);
   vec3 c=mix(vec3(1.,.5,.2), vec3(1.,.78,.5), h2*h2);
-  return c*v*tw*spread*uG.w*22.*exp(-t*.003); }
+  return c*v*tw*spread*uG.w*80.*exp(-t*.004); }
 float lineCov(float d, float w, float fw){ fw=max(fw,1e-4); return clamp((min(d+fw*.5,w)-max(d-fw*.5,-w))/fw,0.,1.); }
 vec3 shadeStone(vec3 p, vec3 n, vec3 rd, vec3 C, vec4 v, bool cheap);
 vec3 shadeTop(vec3 p, vec3 rd, float t){
@@ -267,6 +269,7 @@ vec3 shadeTop(vec3 p, vec3 rd, float t){
   float fr=.05+.95*pow(1.-NV,5.);
   vec3 col=base*KEYC*uD.w*spot*max(Lk.y,0.)*sh*ao*1.4;
   col+=base*(COLDC*uG.x*.25+WARMC*uG.y*flick*.25);
+  col+=mix(WARMC*1.2, COLDC*.9, smoothstep(5.,-5.,g.x))*uB.x*.035*exp(-abs(g.x)*.06)*(1.-fr);
   // reflection (with the stones mirrored in the glass)
   vec2 wob=vec2(n3(vec3(g*1.3,0.)), n3(vec3(g*1.3,5.)))-.5;
   vec3 nr=normalize(vec3(wob.x*.012,1.,wob.y*.012));
@@ -280,15 +283,18 @@ vec3 shadeTop(vec3 p, vec3 rd, float t){
   float wx=abs(floor(g.x+.5))>8.5?.028:.016, wz=abs(floor(g.y+.5))>8.5?.028:.016;
   float lx=lineCov(gd.x,wx,fw.x)*inX*step(abs(g.x),9.5), lz=lineCov(gd.y,wz,fw.y)*inZ*step(abs(g.y),9.5);
   float L=max(lx,lz);
-  float sweep=smoothstep(uH.z+.6, uH.z-2.5, g.y);
-  float front=exp(-pow((g.y-uH.z)/.9,2.));
-  vec3 gem=GOLDC*uD.y*(.10+.32*spot)*sweep + GOLDC*front*1.6;
+  float rg=length(g);
+  float sweep=smoothstep(uH.z+.4, uH.z-2.2, rg);
+  float front=exp(-pow((rg-uH.z)/.7,2.))*smoothstep(13.5,9.,uH.z);
+  vec3 tint=mix(vec3(1.,.62,.30), vec3(.85,.88,1.), smoothstep(3.5,-3.5,g.x));
+  vec3 gcol=mix(GOLDC, tint*vec3(1.,.9,.75), uB.x);
+  vec3 gem=gcol*uD.y*(.10+.32*spot)*sweep + GOLDC*front*1.6;
   vec3 gref=vec3(1.,.78,.42)*(env(R)*.8+KEYC*pow(max(dot(R,Lk),0.),24.)*uD.w*.9)*sweep;
   // hoshi
   vec2 hp=clamp(floor((g+3.)/6.)*6., vec2(-6.), vec2(6.)); float hd=length(g-hp);
-  float hsw=smoothstep(uH.z+.3, uH.z-1., hp.y);
+  float hsw=smoothstep(uH.z+.3, uH.z-1., length(hp));
   float breath=.85+.15*sin(uTime*1.3+hp.x*.7+hp.y*.4);
-  vec3 hos=GOLDC*(smoothstep(.095,.06,hd)*3.2+exp(-hd*hd*14.)*.35)*uD.z*breath*hsw;
+  vec3 hos=mix(GOLDC,tint*vec3(1.,.9,.75),uB.x*.7)*(smoothstep(.095,.06,hd)*2.2+exp(-hd*hd*14.)*.35)*uD.z*breath*hsw;
   // landing pulses: a soft ring of light from each stone that lands
   vec3 pl=vec3(0.); float plg=0.;
   for(int i=0;i<8;i++){ vec4 q=uPul[i]; if(q.w<=0.) continue; float d=length(g-q.xy), a=q.z;
@@ -300,22 +306,22 @@ vec3 shadeTop(vec3 p, vec3 rd, float t){
   if(uE.w>0.){ float d=length(g-uE.xy), a=uE.z;
     if(a<0.){ float s=smoothstep(-1.,0.,a); rp+=C37*exp(-d*d*2.5)*s*s*.9; }
     else { float amp=uE.w*exp(-a*.28);
-      for(int e=0;e<2;e++){ float ae=a-float(e)*.7; if(ae<0.) continue; float R2=ae*6.4;
-        float w=.55+.22*ae; float x=(d-R2)/w; float ring=exp(-x*x)*(x<0.?1.:1.)*amp*(e==0?1.:.35);
-        rpg+=ring; rp+=C37*ring*.22; }
-      rp+=C37*smoothstep(a*6.4,0.,d)*.025*amp;
-      float cor=exp(-pow((d-.52)/.05,2.))*(1.2+2.5*exp(-a*1.3))+exp(-max(d-.5,0.)*2.2)*.3*(1.+2.*exp(-a*2.));
+      for(int e=0;e<2;e++){ float ae=a-float(e)*.8; if(ae<0.) continue; float R2=ae*5.6;
+        float w=.22+.10*ae; float x=(d-R2)/w; float ring=(x>0.?exp(-x*x*2.2):exp(-x*x*.35))*amp*(e==0?1.:.3);
+        rpg+=ring; rp+=C37*ring*.16; }
+      rp+=C37*smoothstep(a*5.6,0.,d)*.012*amp;
+      float cor=exp(-max(d-.46,0.)*5.)*(1.5+3.*exp(-a*1.3))*smoothstep(.40,.47,d)+exp(-max(d-.46,0.)*1.4)*.3*(1.+2.*exp(-a*2.));
       rp+=C37*cor*uE.w; } }
   // move 78: a candle-warm light that spreads slowly over the board
   vec3 wm=vec3(0.); float wmg=0.;
   if(uF.w>0.){ float d=length(g-uF.xy), a=uF.z;
     if(a<0.){ float s=smoothstep(-1.,0.,a); wm+=C78*exp(-d*d*2.)*s*s*.8; }
-    else { float I=uF.w*flick*(.6+.4*smoothstep(0.,1.5,a))+uF.w*2.*exp(-a*3.);
+    else { float I=uF.w*flick*(.8+.5*smoothstep(0.,2.5,a))+uF.w*2.*exp(-a*2.2);
       float reach=smoothstep(a*2.4+1., a*2.4-2., d);
       wm+=C78*I*(base*40./(1.+d*d*1.2) + exp(-max(d-.5,0.)*1.8)*.5*(1.+exp(-a*2.)) );
       wm+=C78*exp(-pow((d-.52)/.06,2.))*I*1.4;
       wmg=reach*I; } }
-  vec3 gl=gem+gref*.6 + GOLDC*(plg*1.2+rpg*3.5) + C78*wmg*1.2*uD.y;
+  vec3 gl=gem+gref*.6 + GOLDC*plg*1.2 + C37*rpg*8. + C78*wmg*1.2*uD.y;
   col=mix(col, gl, L*.92);
   col+=hos+pl+rp+wm;
   // depth inside the glass: faint gilded dust far beneath the surface
@@ -361,13 +367,13 @@ vec3 shadeStone(vec3 p, vec3 n, vec3 rd, vec3 C, vec4 v, bool cheap){
   Hh=normalize(Lc+V); col+=COLDC*uG.x*pow(max(dot(n,Hh),0.),shin)*ks*(shin+8.)/25.*ao;
   Hh=normalize(Lw+V); col+=WARMC*uG.y*flick*pow(max(dot(n,Hh),0.),shin)*ks*(shin+8.)/25.*ao;
   vec3 R=reflect(rd,n);
-  col+=env(R)*fr*(white?.4:.55)*ao;
-  if(R.y<0.) col+=GOLDC*uD.y*.04*fr*ao;                                           // the gold grid seen in the stone
+  col+=env(R)*fr*(white?.4:.32)*ao;
+  if(R.y<0.) col+=GOLDC*uD.y*(white?.04:.025)*fr*ao;                                           // the gold grid seen in the stone
   // landing pulse
   float pg=v.g; col+=vec3(1.,.86,.64)*pg*(fr*2.4+.12)*(white?.6:1.);
   // light from the ripple of move 37 washing past this stone
   if(uE.w>0.&&uE.z>0.){ float d=length(C.xz-uE.xy), a=uE.z, amp=uE.w*exp(-a*.28), rl=0.;
-    for(int e=0;e<3;e++){ float ae=a-float(e)*.5; if(ae<0.) continue; rl+=exp(-pow((d-ae*6.6)/.7,2.))*(e==0?1.:(e==1?.45:.2)); }
+    for(int e=0;e<2;e++){ float ae=a-float(e)*.8; if(ae<0.) continue; rl+=exp(-pow((d-ae*5.6)/.6,2.))*(e==0?1.:.3); }
     rl*=amp; col+=C37*rl*(alb*2.2*max(.35-n.y,0.)+fr*1.6+.03); }
   // warm light from move 78
   if(uF.w>0.&&uF.z>-.3&&kind!=4){ vec3 P78=vec3(uF.x,.3,uF.y); vec3 l=P78-p; float d2=dot(l,l); l=normalize(l);
@@ -376,11 +382,11 @@ vec3 shadeStone(vec3 p, vec3 n, vec3 rd, vec3 C, vec4 v, bool cheap){
   if(kind==3){ // move 37: black slate lit by a cold gold corona
     float a=uE.z; float k0=a<0.? smoothstep(-1.,0.,a)*.6 : 1.;
     float rim=pow(1.-NV,2.5);
-    col+=C37*uE.w*k0*(rim*(1.6+2.4*exp(-max(a,0.)*1.1))+max(-n.y+.1,0.)*.5);
-    col+=C37*uE.w*k0*pow(max(dot(R,normalize(vec3(0.,1.,0.)-rd*.2)),0.),40.)*.6; }
+    col+=C37*uE.w*k0*(pow(1.-NV,4.)*(1.2+1.6*exp(-max(a,0.)*1.1))+smoothstep(.1,-.6,n.y)*.9);
+    col+=C37*uE.w*k0*(pow(max(R.y,0.),24.)*.9+pow(max(R.y,0.),4.)*.08); }
   if(kind==4){ // move 78: a shell stone lit from within, like a candle behind alabaster
     float a=uF.z; float k0=a<0.? smoothstep(-1.,0.,a)*.5 : 1.;
-    float I=uF.w*k0*flick*(1.+1.5*exp(-max(a,0.)*2.5));
+    float I=uF.w*k0*flick*(1.25+1.3*exp(-max(a,0.)*1.6));
     float thin=.55+.45*pow(1.-NV,1.5);
     col=mix(col, col*.4, .5*k0) + C78*I*(1.15-.25*str)*thin*1.6 + vec3(1.,.82,.6)*I*pow(NV,6.)*.6; }
   return col; }
@@ -400,11 +406,11 @@ void main(){
   for(int i=0;i<20;i++){ if(i>=NH) break; float t=tE*(float(i)+jit)/float(NH); vec3 p=ro+rd*t;
     float sp=keyShaft(p)*step(-.2,p.y+((abs(p.x)<BX&&abs(p.z)<BX)?0.:100.));
     float dn=n3(p*.3+vec3(0.,-uTime*.05,uTime*.02)); dn=dn*dn*2.2; hz+=KEYC*sp*dn*exp(-max(p.y,0.)*.09)*smoothstep(-3.,1.,p.y); }
-  hz*=tE/float(NH)*uG.z*uD.w*.0022;
+  hz*=tE/float(NH)*uG.z*uD.w*.0011;
   vec3 gC=COLDP-ro, gW=WARMP-ro;
-  float s0=dot(gC,rd); float dC=max(length(gC-rd*s0),.3); float iC=(atan((tE-s0)/dC)+atan(s0/dC))/dC;
-  s0=dot(gW,rd); float dW=max(length(gW-rd*s0),.3); float iW=(atan((tE-s0)/dW)+atan(s0/dW))/dW;
-  hz+=(COLDC*uG.x*iC+WARMC*uG.y*flick*iW)*uG.z*.05;
+  float s0=dot(gC,rd); float dC=max(length(gC-rd*s0),4.); float iC=(atan((tE-s0)/dC)+atan(s0/dC))/dC;
+  s0=dot(gW,rd); float dW=max(length(gW-rd*s0),4.); float iW=(atan((tE-s0)/dW)+atan(s0/dW))/dW;
+  hz+=(COLDC*uG.x*iC+WARMC*uG.y*flick*iW)*uG.z*.06;
   col=col*exp(-depth*.0025*uG.z)+hz;
   fragColor=vec4(col, depth); }`;
 
@@ -417,7 +423,7 @@ float h12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*.1031); p3+=dot(p3,p3.yzx+33.33); r
 void main(){
   vec4 c0=texture(uSrc,vUv); float s0=coc(c0.a);
   vec3 acc=c0.rgb; float tot=1.;
-  float jit=h12(gl_FragCoord.xy+fract(uTime*3.7)*57.)*6.2832;
+  float jit=h12(gl_FragCoord.xy)*.35;
   for(int i=0;i<200;i++){ if(float(i)>=uN) break;
     float fi=float(i)+.5; float r=uMaxR*sqrt(fi/uN); float a=fi*2.39996+jit;
     vec4 s=texture(uSrc, vUv+vec2(cos(a),sin(a))*r/uRes);
@@ -427,35 +433,36 @@ void main(){
   fragColor=vec4(acc/tot,1.); }`;
 
 // ---------------------------------------------------------------- board scene: cameras and light cues
-// Camera keys: [t, [pos xyz, look-at xyz, fov, aperture]]. The look-at point is kept in focus.
+// Camera keys: [t, [pos xyz, look-at xyz, fov, aperture, focus distance (0 = the look-at point)]].
 const CAM_INTRO = [
-  [0, [3.4, 0.9, -15.2, 0.6, 0.05, -4.5, 1.12, 0.020]],
-  [6, [2.6, 1.0, -12.6, 0.2, 0.05, -2.8, 1.12, 0.020]],
-  [12, [1.3, 1.65, -10.6, -0.2, 0.0, 0.0, 1.15, 0.016]],
-  [16.5, [0.6, 8.5, -17.0, 0.0, 0.0, 0.4, 1.2, 0.010]],
-  [20.6, [0.9, 19.5, -13.2, -0.4, 0.0, 0.7, 1.2, 0.006]],
+  [0, [1.05, 0.62, -1.55, -0.15, 0.42, 0.55, 1.75, 0.034, 1.95]],
+  [6, [1.55, 1.1, -2.9, -0.20, 0.38, 0.60, 1.65, 0.028, 3.3]],
+  [9.8, [6.4, 4.6, -12.0, -0.6, 0.0, 0.6, 1.3, 0.014, 0]],
+  [15.5, [3.4, 10.5, -17.5, -0.4, 0.0, 0.5, 1.25, 0.010, 0]],
+  [20.6, [0.9, 19.5, -13.2, -0.4, 0.0, 0.7, 1.2, 0.006, 0]],
 ];
 const CAM_G2 = [
-  [20.6, [0.9, 19.5, -13.2, -0.4, 0.0, 0.7, 1.2, 0.006]],
-  [24.4, [-1.6, 18.2, -12.4, -1.2, 0.0, 0.8, 1.2, 0.006]],
-  [26.6, [-6.0, 11.0, -11.4, -4.0, 0.0, 0.6, 1.2, 0.008]],
-  [28.0, [-11.6, 5.0, -8.2, -5.6, 0.2, 0.2, 1.25, 0.013]],
-  [31.5, [-13.2, 3.4, -3.2, -5.5, 0.2, 0.2, 1.25, 0.015]],
-  [35.5, [-11.6, 4.4, 4.2, -5.0, 0.2, 0.3, 1.25, 0.013]],
-  [41.6, [-3.0, 23.0, -1.8, -2.2, 0.0, 0.5, 1.2, 0.005]],
+  [20.6, [0.9, 19.5, -13.2, -0.4, 0.0, 0.7, 1.2, 0.006, 0]],
+  [24.4, [-1.6, 18.2, -12.4, -1.2, 0.0, 0.8, 1.2, 0.006, 0]],
+  [26.6, [-6.0, 11.0, -11.4, -4.0, 0.0, 0.6, 1.2, 0.008, 0]],
+  [28.0, [-11.6, 5.0, -8.2, -5.0, 0.2, 0.2, 1.25, 0.013, 0]],
+  [31.5, [-8.9, 2.2, -4.2, -4.8, 0.25, 0.1, 1.3, 0.020, 0]],
+  [35.5, [-8.4, 2.6, 2.4, -4.8, 0.25, 0.0, 1.3, 0.018, 0]],
+  [41.6, [-3.0, 23.0, -1.8, -2.2, 0.0, 0.5, 1.2, 0.005, 0]],
 ];
 const CAM_G4 = [
-  [42.4, [1.0, 25.5, -2.4, 0.0, 0.0, 0.3, 1.2, 0.005]],
-  [45.6, [-0.4, 23.5, -1.8, -0.4, 0.0, 0.5, 1.2, 0.005]],
-  [50.0, [4.4, 3.3, -5.4, -1.0, 0.25, 1.0, 1.25, 0.016]],
-  [54.5, [5.2, 2.6, 2.4, -1.0, 0.2, 1.0, 1.25, 0.016]],
-  [60.0, [1.4, 15.0, -5.0, -0.6, 0.0, 0.6, 1.2, 0.008]],
-  [72.0, [0.0, 44.0, -4.0, 0.0, 0.0, 0.0, 1.2, 0.004]],
+  [42.4, [1.0, 25.5, -2.4, 0.0, 0.0, 0.3, 1.2, 0.005, 0]],
+  [45.6, [-0.4, 23.5, -1.8, -0.4, 0.0, 0.5, 1.2, 0.005, 0]],
+  [50.0, [3.6, 4.1, -4.3, -1.2, 0.2, 1.4, 1.3, 0.014, 0]],
+  [55.0, [4.8, 3.6, 1.6, -1.1, 0.2, 1.2, 1.3, 0.014, 0]],
+  [59.6, [2.2, 11.5, -6.0, -0.7, 0.0, 0.7, 1.2, 0.008, 0]],
+  [64.0, [0.6, 34.0, -5.5, 0.0, 0.0, -1.2, 1.2, 0.004, 0]],
+  [72.0, [-0.6, 46.0, -4.0, 0.0, 0.0, -1.6, 1.2, 0.004, 0]],
 ];
 function boardShot(k) {
   const keys = k < 20.6 ? CAM_INTRO : k < 42.2 ? CAM_G2 : CAM_G4;
   const v = spline(keys, k);
-  return { cam: camOf([v[0], v[1], v[2]], [v[3], v[4], v[5]], v[6]), focus: len3(sub([v[3], v[4], v[5]], [v[0], v[1], v[2]])), aper: v[7] };
+  return { cam: camOf([v[0], v[1], v[2]], [v[3], v[4], v[5]], v[6]), focus: v[8] > 0.05 ? v[8] : len3(sub([v[3], v[4], v[5]], [v[0], v[1], v[2]])), aper: v[7] };
 }
 function boardScene(k, T) {
   const fin = FINAL(), s = SC(0.55, 1.5);
@@ -464,19 +471,20 @@ function boardScene(k, T) {
   const st = boardState(g, k, { cascade: g === "G4" });
   const { cam, focus, aper } = boardShot(k);
   // light cues
-  const keyI = 1.25 * smooth(0.3, 5.5, k) * (1 - 0.35 * smooth(26.4, 27.8, k) + 0.35 * smooth(28.0, 29.5, k)) * (1 - 0.3 * smooth(48.0, 49.8, k) + 0.3 * smooth(50.0, 52, k)) * (1 - 0.8 * smooth(60, 66, k));
-  const grid = smooth(0.5, 3, k) * (0.85 - 0.25 * smooth(26.4, 27.8, k) + 0.25 * smooth(28.2, 30, k)) * (1 - 0.75 * smooth(60, 67, k));
-  const hoshi = smooth(1, 4, k) * (1 - 0.6 * smooth(60, 67, k));
+  const keyI = 1.25 * smooth(0.3, 5.5, k) * (1 - 0.35 * smooth(26.4, 27.8, k) + 0.35 * smooth(28.0, 29.5, k)) * (1 - 0.3 * smooth(48.0, 49.8, k) + 0.3 * smooth(50.0, 52, k)) * (1 - 0.86 * smooth(59.2, 62.6, k));
+  const grid = smooth(0.5, 3, k) * (0.85 - 0.25 * smooth(26.4, 27.8, k) + 0.25 * smooth(28.2, 30, k)) * (1 - 0.8 * smooth(59.2, 62.6, k));
+  const hoshi = smooth(1, 4, k) * (1 - 0.75 * smooth(59.2, 62.6, k));
   const cold = 0.8 * smooth(7.6, 10.5, k) * (1 + 0.5 * Math.exp(-Math.max(0, k - T37) * 0.8) * (k > T37 && k < 42.2 ? 1 : 0)) * (1 - 0.8 * smooth(60, 66, k));
   const warm = 0.8 * smooth(7.6, 10.5, k) * (1 + (k > 42.2 ? 0.6 * smooth(T78, T78 + 3, k) : 0)) * (1 - 0.7 * smooth(60, 66, k));
   const sea = smooth(13.0, 15.0, k) * (1 - 0.5 * smooth(19, 22, k)) * (1 - 0.6 * smooth(62, 68, k));
-  const seaR = lerp(0, 260, easeIn(clamp((k - 13.0) / 6.0)) * 0.6 + 0.4 * smooth(13.0, 19.0, k));
-  const sweep = lerp(-13, 14, smooth(0.6, 7.5, k));
+  const seaR = lerp(0, 420, easeIn(clamp((k - 12.6) / 6.4)) * 0.6 + 0.4 * smooth(12.6, 19.0, k));
+  const split = smooth(7.4, 10.2, k) * (1 - 0.65 * smooth(18.5, 21.5, k)) * (1 - smooth(60, 66, k));
+  const sweep = lerp(-0.5, 15, Math.pow(smooth(0.6, 11.5, k), 1.7));
   const e37 = g === "G2" ? [...st.big, st.age, smooth(T37 - DROP37, T37, k) * (1 - 0.4 * smooth(38, 41.5, k))] : [0, 0, 0, 0];
-  const f78 = g === "G4" ? [...st.big, st.age, smooth(T78 - DROP37, T78, k)] : [0, 0, 0, 0];
+  const f78 = g === "G4" ? [...st.big, st.age, smooth(T78 - DROP37, T78, k) * (1 - 0.45 * smooth(59.5, 63, k))] : [0, 0, 0, 0];
   const tex = P.run("ch3_board", BOARD_FS, "ch3scene", sw, sh, {
     uTime: T, ...camUniforms(cam),
-    uD: [st.liftMax, grid, hoshi, keyI], uE: e37, uF: f78, uG: [cold, warm, 1.0, sea], uH: [fin ? 1 : 0, 0, sweep, seaR],
+    uD: [st.liftMax, grid, hoshi, keyI], uE: e37, uF: f78, uG: [cold, warm, 1.0, sea], uH: [fin ? 1 : 0, 0, sweep, seaR], uB: [split, 0, 0, 0],
     uPul: { vec4: st.pul },
   }, { uBoard: st.tex });
   const fade = smooth(0, 1.8, k) * (1 - smooth(41.4, 42.2, k) + smooth(42.3, 43.3, k)) * (1 - smooth(70.6, 72, k));
@@ -484,19 +492,266 @@ function boardScene(k, T) {
   const flash78 = g === "G4" && k > T78 ? Math.exp(-(k - T78) * 1.6) : 0;
   const q = project(cam, g === "G2" ? [st.big[0], 0.3, st.big[1]] : [st.big[0], 0.3, st.big[1]]);
   const rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
-  GL.frame({ name: "ch3_dof", fs: DOF_FS, scale: s, uniforms: { uTime: T, uFocus: focus, uAper: aper, uMaxR: 0.022 * sh, uN: fin ? 96 : 40 }, textures: { uSrc: tex } },
+  GL.frame({ name: "ch3_dof", fs: DOF_FS, scale: s, uniforms: { uTime: T, uFocus: focus, uAper: aper, uMaxR: 0.022 * sh, uN: fin ? 160 : 72 }, textures: { uSrc: tex } },
     { bloom: 0.55 + 0.5 * flash37 + 0.35 * flash78, thresh: 1.05, exposure: 1.05 + 0.25 * flash37, rays: [rx, ry, 0.12 * flash37 + 0.08 * flash78], letterbox: LB, vignette: 0.55, ca: 0.0012, grain: 0.0, t: T, fade });
   blit();
   return { cam, focus, aper };
 }
 
+// 60–72: "4 : 1" over the dimmed board, the one human win still glowing like an ember
+function scoreText(k) {
+  const a = smooth(60.8, 62.6, k) * (1 - smooth(70.0, 71.4, k));
+  if (a <= 0) return;
+  const u = clamp((k - 60.8) / 10.6), y = H / 2 - 8;
+  o.save();
+  o.globalCompositeOperation = "source-over";
+  const g = o.createRadialGradient(W / 2, y, 0, W / 2, y, 420); g.addColorStop(0, "rgba(0,0,0,0.55)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  o.globalAlpha = a; o.fillStyle = g; o.fillRect(W / 2 - 420, y - 420, 840, 840);
+  o.restore();
+  const sp = 0.16 - 0.05 * ease(u * 1.5);
+  line("4", W / 2 - 128 - sp * 300, y, { size: 176, font: "Corm", color: "#f6ecd8", alpha: a, glow: 30, blur: (1 - a) * 8, spacing: 0 });
+  line(":", W / 2, y - 6, { size: 120, font: "Corm", color: GOLD, alpha: a * 0.85, glow: 18, blur: (1 - a) * 8, spacing: 0 });
+  line("1", W / 2 + 128 + sp * 300, y, { size: 176, font: "Corm", color: "#f6ecd8", alpha: a, glow: 30, blur: (1 - a) * 8, spacing: 0 });
+  o.save(); o.globalAlpha = a * 0.55; o.fillStyle = GOLD; const hw = 150 * smooth(61.6, 63.6, k); o.fillRect(W / 2 - hw, y + 108, hw * 2, 1); o.restore();
+}
+
+// ---------------------------------------------------------------- 72–86: the transformer — a sentence held together by gilded arcs of attention
+const VOID_FS = COMMON + `
+void main(){ vec3 rd=camRay(gl_FragCoord.xy);
+  vec3 c=mix(vec3(.007,.006,.009), vec3(.002,.002,.004), clamp(rd.y*2.+.5,0.,1.));
+  c+=nebula(rd, vec3(.014,.010,.02), vec3(.07,.045,.015))*.4*uA.y;
+  c+=stars(rd,.16);
+  vec2 uv=(gl_FragCoord.xy-.5*uRes)/uRes.y;
+  c+=vec3(1.,.70,.38)*exp(-dot(uv*vec2(.55,1.5),uv*vec2(.55,1.5))*3.)*.028*uA.x;
+  fragColor=vec4(c,1.); }`;
+const WORDS = ["그", "한", "수가", "수백", "년의", "상식을", "뒤집었다"];
+const ATT = [ // query row → key weights (hand-set; how a model might read the sentence)
+  [0, .5, .8, 0, 0, 0, 0],
+  [.4, 0, .9, 0, 0, 0, 0],
+  [.4, .9, 0, 0, 0, 0, .6],
+  [0, 0, 0, 0, .9, .3, 0],
+  [0, 0, 0, .9, 0, .7, 0],
+  [0, 0, 0, .4, .7, 0, .8],
+  [.2, .3, .9, 0, .2, 1, 0],
+];
+const WORD_T0 = 73.0, WORD_DT = 0.42, Q_T0 = 76.2, Q_DT = 1.05;
+let WL = null;
+function wordLayout() {
+  if (WL) return WL;
+  const S = 0.84;
+  o.save(); o.font = '100px "SerifM"'; const wd = WORDS.map(w => o.measureText(w).width / 100 * S); o.restore();
+  const gap = 0.95 * S, total = wd.reduce((a, b) => a + b, 0) + gap * (WORDS.length - 1);
+  let x = -total / 2; WL = [];
+  WORDS.forEach((w, i) => { const cx = x + wd[i] / 2, e = cx / (total / 2);
+    WL.push({ w, p: [-cx, 0.18 * Math.sin(i * 1.7 + 0.3), 2.2 * e * e + 0.35 * Math.sin(i * 2.1 + 0.4)], wd: wd[i], S });
+    x += wd[i] + gap; });
+  return WL;
+}
+const MOTES = (() => { const r = rng(37), a = []; for (let i = 0; i < 190; i++) a.push([lerp(-13, 13, r()), lerp(-5, 7, r()), lerp(-5, 16, r()), r(), r()]); return a; })();
+let glowCv = null;
+function arcPoints(cam, A, B, up, n = 34) {
+  const h = 0.45 + 0.30 * Math.abs(A[0] - B[0]) * (up ? 1 : 0.72), dz = up ? 0.15 : -0.35;
+  const c1 = [A[0], A[1] + h, A[2] + dz], c2 = [B[0], B[1] + h, B[2] + dz], pts = [];
+  for (let i = 0; i <= n; i++) { const t = i / n, s = 1 - t;
+    const p = [0, 1, 2].map(q => s * s * s * A[q] + 3 * s * s * t * c1[q] + 3 * s * t * t * c2[q] + t * t * t * B[q]);
+    const pr = project(cam, p); if (pr) pts.push(pr); }
+  return pts;
+}
+function wordsScene(k, T) {
+  const u = k - 72, s = SC(0.5, 1.0);
+  const cu = easeIO(clamp(u / 14));
+  const pos = lerp3([1.3, 1.5, -15.4], [-1.2, 0.7, -12.6], cu), at = lerp3([0.2, 1.05, 0.8], [-0.1, 1.15, 0.6], cu);
+  const cam = camOf(pos, at, 1.22);
+  const focus = len3(sub(at, pos));
+  const fade = smooth(72.2, 73.4, k) * (1 - smooth(85.1, 86.0, k));
+  GL.frame({ name: "ch3_void", fs: VOID_FS, scale: s, uniforms: { uTime: T, ...camUniforms(cam), uA: [smooth(73, 77, k), 1, 0, 0] } },
+    { bloom: 0.5, thresh: 1.0, exposure: 1.0, letterbox: LB, vignette: 0.6, grain: 0, t: T, fade });
+  blit();
+  const L = wordLayout();
+  const fin = fade;
+  pic(() => {
+    // gold dust drifting at every depth
+    o.save(); o.globalCompositeOperation = "lighter";
+    for (const m of MOTES) {
+      const p = [m[0] + Math.sin(T * 0.13 + m[3] * 9) * 0.4, m[1] + ((T * 0.08 + m[4] * 12) % 12) - 6, m[2]];
+      const q = project(cam, p); if (!q) continue;
+      const coc = Math.min(26, 0.022 * H * Math.abs(q[2] - focus) / q[2]) + 1.2;
+      const al = fin * (0.5 + 0.5 * Math.sin(T * 1.3 + m[3] * 20)) * 0.55 / (1 + coc * coc * 0.04);
+      const g = o.createRadialGradient(q[0], q[1], 0, q[0], q[1], coc * 1.6);
+      g.addColorStop(0, `rgba(255,214,150,${al})`); g.addColorStop(0.55, `rgba(255,190,110,${al * 0.35})`); g.addColorStop(1, "rgba(255,170,90,0)");
+      o.fillStyle = g; o.beginPath(); o.arc(q[0], q[1], coc * 1.6, 0, 7); o.fill();
+    }
+    o.restore();
+    // arcs of attention: thin gilded cores here, their glow on a half-size layer blurred once
+    if (!glowCv) { glowCv = document.createElement("canvas"); glowCv.width = W / 2; glowCv.height = H / 2; }
+    const gx = glowCv.getContext("2d"); gx.setTransform(1, 0, 0, 1, 0, 0); gx.clearRect(0, 0, W / 2, H / 2); gx.scale(0.5, 0.5); gx.lineCap = "round";
+    const tops = L.map(w => [w.p[0], w.p[1] + 0.40 * w.S, w.p[2]]);
+    const heat = new Array(WORDS.length).fill(0);
+    const finale = smooth(82.6, 84.0, k);
+    o.save(); o.globalCompositeOperation = "lighter"; o.lineCap = "round";
+    for (let qi = 0; qi < WORDS.length; qi++) {
+      const tq = Q_T0 + qi * Q_DT;
+      const keys = ATT[qi].map((w, j) => [w, j]).filter(([w]) => w > 0).sort((a, b) => b[0] - a[0]);
+      keys.forEach(([w, j], rank) => {
+        const t0 = tq + 0.12 * rank, prog = ease(clamp((k - t0) / 0.75));
+        if (prog <= 0) return;
+        const after = Math.max(0, k - (t0 + 0.75));
+        let b = w * (0.32 + 0.68 * Math.exp(-after * 0.8));
+        b = lerp(b, w * (0.75 + 0.25 * Math.sin(T * 2.1 + qi + j)), finale);
+        b *= fin;
+        const pts = arcPoints(cam, tops[qi], tops[j], j > qi);
+        const nUse = Math.max(2, Math.round(pts.length * prog));
+        const sub2 = pts.slice(0, nUse);
+        // glow
+        gx.strokeStyle = `rgba(255,186,96,${0.55 * b})`; gx.lineWidth = 10 + 10 * w; gx.beginPath(); sub2.forEach((p, i) => i ? gx.lineTo(p[0], p[1]) : gx.moveTo(p[0], p[1])); gx.stroke();
+        // core: gold leaf with a brighter leading edge
+        const pa = sub2[0], pb = sub2[sub2.length - 1];
+        const grad = o.createLinearGradient(pa[0], pa[1], pb[0], pb[1]);
+        grad.addColorStop(0, `rgba(205,150,70,${0.55 * b})`); grad.addColorStop(1, `rgba(255,236,200,${0.95 * b})`);
+        o.strokeStyle = grad; o.lineWidth = 1.1 + 1.9 * w; o.beginPath(); sub2.forEach((p, i) => i ? o.lineTo(p[0], p[1]) : o.moveTo(p[0], p[1])); o.stroke();
+        // the travelling head, and beads of light flowing in the finale
+        if (prog < 1) { o.fillStyle = `rgba(255,244,220,${b})`; o.beginPath(); o.arc(pb[0], pb[1], 2.2 + 2 * w, 0, 7); o.fill();
+          gx.fillStyle = `rgba(255,214,150,${b})`; gx.beginPath(); gx.arc(pb[0], pb[1], 14 + 10 * w, 0, 7); gx.fill(); }
+        if (finale > 0) { const ph = ((T * 0.55 + qi * 0.37 + j * 0.21) % 1), bi = Math.min(pts.length - 1, Math.floor(ph * pts.length)), bp = pts[bi];
+          o.fillStyle = `rgba(255,240,210,${finale * b})`; o.beginPath(); o.arc(bp[0], bp[1], 1.8 + 1.6 * w, 0, 7); o.fill(); }
+        if (prog >= 1) heat[j] = Math.max(heat[j], b * Math.exp(-after * 1.2));
+        heat[qi] = Math.max(heat[qi], 0.7 * Math.exp(-Math.max(0, k - tq) * 0.9) * (k >= tq ? 1 : 0));
+      });
+    }
+    o.restore();
+    o.save(); o.globalCompositeOperation = "lighter"; o.filter = "blur(9px)"; o.drawImage(glowCv, 0, 0, W, H); o.filter = "blur(3px)"; o.globalAlpha = 0.6; o.drawImage(glowCv, 0, 0, W, H); o.restore();
+    // the words: luminous serif, focus falling off with depth
+    L.forEach((w, i) => {
+      const q = project(cam, w.p); if (!q) return;
+      const ta = WORD_T0 + i * WORD_DT, a = smooth(ta, ta + 0.9, k) * fin;
+      if (a <= 0) return;
+      const size = w.S * cam.fov * H / q[2];
+      const dofB = Math.min(6, 0.022 * H * Math.abs(q[2] - focus) / q[2] * 0.5);
+      const h = Math.min(1, heat[i]);
+      const rise = (1 - ease(clamp((k - ta) / 1.2))) * 18;
+      o.save(); o.globalAlpha = a; o.font = `${size}px "SerifM"`; o.textAlign = "center"; o.textBaseline = "alphabetic";
+      if (dofB + (1 - a) * 6 > 0.3) o.filter = `blur(${dofB + (1 - a) * 6}px)`;
+      o.shadowColor = `rgba(255,${200 + 30 * h},${140 + 40 * h},${0.55 + 0.45 * h})`; o.shadowBlur = 16 + 26 * h;
+      o.fillStyle = h > 0.02 ? `rgb(255,${238 - 10 * h},${214 - 40 * h})` : "#efe4cf";
+      o.fillText(w.w, q[0], q[1] + rise);
+      o.restore();
+    });
+  });
+}
+
+// ---------------------------------------------------------------- 86–100: the night Earth; warm lights spread outward from San Francisco
+const EARTH_FS = COMMON + `
+uniform sampler2D uLand;
+uniform vec4 uD;   // x spread front (radians from the origin), y clouds, z lights master, w quality
+uniform vec4 uE;   // origin unit vector, w atmosphere
+uniform vec4 uF;   // sun direction (behind the planet), w dawn
+const float PI=3.14159265;
+vec3 sph(float lat, float lon){ return vec3(cos(lat)*cos(lon), sin(lat), -cos(lat)*sin(lon)); }
+void main(){
+  vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
+  vec3 sun=normalize(uF.xyz);
+  vec3 col=stars(rd,.75)+nebula(rd, vec3(.010,.008,.018), vec3(.05,.034,.014))*.35;
+  float b=dot(ro,rd), c=dot(ro,ro)-1., h=b*b-c;
+  float tP=1e9;
+  vec3 moon=normalize(vec3(-.55,.35,-.75));
+  if(h>0.){ float t=-b-sqrt(h); if(t>0.){ tP=t; vec3 p=ro+rd*t, n=normalize(p);
+    float lat=asin(clamp(n.y,-1.,1.)), lon=atan(-n.z,n.x);
+    vec2 uv=vec2(lon/(2.*PI)+.5, .5-lat/PI), uv2=vec2(fract(uv.x+.5)-.5, uv.y);
+    vec2 gx=dFdx(uv), gy=dFdy(uv), gx2=dFdx(uv2), gy2=dFdy(uv2);
+    if(dot(gx2,gx2)+dot(gy2,gy2)<dot(gx,gx)+dot(gy,gy)){ gx=gx2; gy=gy2; }
+    vec4 tx=textureGrad(uLand, uv, gx, gy);
+    float land=tx.r, city=tx.g;
+    float mo=max(dot(n,moon),0.);
+    float snow=smoothstep(.58,.82,abs(n.y))*(.6+.4*noise(n*30.));
+    float seaIce=smoothstep(.86,.95,n.y)*(1.-land)*(.5+.5*noise(n*18.));
+    vec3 ground=vec3(.006,.0055,.005)*(.6+.8*noise(n*60.))*(1.+snow*4.)*land;
+    vec3 ocean=vec3(.0012,.0016,.0030)*(1.-land);
+    col=(ground+ocean+vec3(.03,.033,.04)*seaIce)*(.25+1.6*mo);
+    col+=vec3(.5,.55,.65)*pow(max(dot(reflect(rd,n),moon),0.),60.)*.05*(1.-land);
+    // the lights: each place ignites when the wave reaches it, flares like an ember, then settles
+    float ang=acos(clamp(dot(n,uE.xyz),-1.,1.));
+    float j=(noise(n*21.)-.5)*.22+(noise(n*83.)-.5)*.06;
+    float since=uD.x-(ang+j);
+    float lit=smoothstep(0.,.04,since), ember=exp(-max(since,0.)*16.)*lit;
+    float fine=.25+1.6*pow(noise(n*520.),2.)*(.4+.6*noise(n*170.+3.));
+    float Ls=city*fine*(lit+ember*1.8)*uD.z;
+    vec3 lc=mix(vec3(1.,.50,.18), vec3(1.,.80,.55), smoothstep(.25,1.2,Ls));
+    // clouds drifting over the night side
+    float cl=smoothstep(.5,.8,fbm(n*3.4+vec3(uTime*.004,0.,0.)))*uD.y;
+    col=mix(col, vec3(.010,.011,.014)*(.3+1.4*mo), cl*.75);
+    col+=lc*Ls*2.4*(1.-cl*.55);
+    col+=lc*city*uD.z*lit*.06*(1.-cl);                                   // the soft halo of a lit region
+    // dawn creeping round the limb and a thin air glow
+    float dn=dot(n,sun);
+    col+=vec3(1.,.55,.25)*smoothstep(-.10,.06,dn)*.10*uF.w*(land*.6+.4);
+    float fres=pow(1.-max(dot(n,-rd),0.),3.);
+    col+=mix(vec3(.25,.3,.45),vec3(1.,.6,.3),smoothstep(-.3,.1,dn))*fres*.05*uE.w;
+  } }
+  // the atmosphere ring, lit from behind by the sun
+  float tc=max(-b,0.); vec3 pc=ro+rd*tc; float hc=length(pc), alt=hc-1.;
+  if(tP>1e8 || alt<0.){ float a2=max(alt,0.);
+    float fw=pow(max(dot(rd,sun),0.),2.)*.9+.25;
+    vec3 low=vec3(1.,.42,.16), mid=vec3(1.,.74,.42), high=vec3(.42,.52,.80);
+    vec3 ac=mix(mix(low,mid,smoothstep(0.,.006,a2)),high,smoothstep(.006,.02,a2));
+    float g=exp(-a2/.0085)*(tP>1e8?1.:.0);
+    col+=ac*g*fw*.9*uE.w; }
+  fragColor=vec4(col,1.); }`;
+let earthTex = null;
+function earthTexture() {
+  if (earthTex) return earthTex;
+  const D = window.CH3_DATA, w = D.LAND_W, h = D.LAND_H;
+  const land = document.createElement("canvas"); land.width = w; land.height = h;
+  const lx = land.getContext("2d"), id = lx.createImageData(w, h);
+  D.LAND.split(";").forEach((row, y) => { let x = 0, v = 0; for (const r of row.split(",")) { const n = parseInt(r, 16); if (v) for (let i = 0; i < n; i++) { const j = (y * w + x + i) * 4; id.data[j] = id.data[j + 1] = id.data[j + 2] = 255; } x += n; v ^= 1; }
+    for (let i = 0; i < w; i++) id.data[(y * w + i) * 4 + 3] = 255; });
+  lx.putImageData(id, 0, 0);
+  const soft = document.createElement("canvas"); soft.width = w; soft.height = h;
+  const sx = soft.getContext("2d"); sx.filter = "blur(1.2px)"; sx.drawImage(land, 0, 0);
+  const lights = document.createElement("canvas"); lights.width = w; lights.height = h;
+  const cx = lights.getContext("2d"); cx.fillStyle = "#000"; cx.fillRect(0, 0, w, h); cx.globalCompositeOperation = "lighter";
+  const C = D.CITIES;
+  for (let i = 0; i < C.length; i += 3) {
+    const lon = C[i] / 10, lat = C[i + 1] / 10, lp = C[i + 2];
+    const x = (lon + 180) / 360 * w, y = (90 - lat) / 180 * h, s = clamp((lp - 90) / 60);
+    const r = (0.55 + 2.4 * s * s + 0.5 * s) / Math.max(0.25, Math.cos(lat * Math.PI / 180)) ** 0.5, a = 0.16 + 0.84 * s;
+    for (const ox of [0, -w, w]) { const X = x + ox; if (X < -r * 3 || X > w + r * 3) continue;
+      const g = cx.createRadialGradient(X, y, 0, X, y, r * 2.2); g.addColorStop(0, `rgba(255,255,255,${a})`); g.addColorStop(0.35, `rgba(255,255,255,${a * 0.35})`); g.addColorStop(1, "rgba(255,255,255,0)");
+      cx.fillStyle = g; cx.fillRect(X - r * 2.2, y - r * 2.2, r * 4.4, r * 4.4); }
+  }
+  const a = sx.getImageData(0, 0, w, h).data, b = cx.getImageData(0, 0, w, h).data, out = new Uint8Array(w * h * 4);
+  for (let i = 0; i < w * h; i++) { out[i * 4] = a[i * 4]; out[i * 4 + 1] = Math.min(255, b[i * 4] * (a[i * 4] > 10 ? 1 : 0.25)); out[i * 4 + 3] = 255; }
+  const gl = GL.gl, t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, out); gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return (earthTex = t);
+}
+const sph = (lat, lon) => { const a = lat * Math.PI / 180, b = lon * Math.PI / 180; return [Math.cos(a) * Math.cos(b), Math.sin(a), -Math.cos(a) * Math.sin(b)]; };
+const SF = sph(37.77, -122.42);
+const CAM_EARTH = [ // [t, [lat, lon, distance, target lat, target lon, target depth]]
+  [86.0, [26, -138, 1.62, 44, -112, 0.55]],
+  [92.5, [38, -150, 2.05, 50, -138, 0.55]],
+  [100.0, [52, -168, 2.6, 60, -160, 0.6]],
+];
+function earthScene(k, T) {
+  const s = SC(0.55, 1.5);
+  const v = spline(CAM_EARTH, k);
+  const pos = mul3(sph(v[0], v[1]), v[2]), at = mul3(sph(v[3], v[4]), v[5]);
+  const cam = camOf(pos, at, 1.25);
+  const front = Math.max(0, k - 87.0) * 0.2;
+  const sun = norm(add3(mul3(norm(pos), -1), [0, -0.35, 0]));
+  GL.frame({ name: "ch3_earth", fs: EARTH_FS, scale: s, textures: { uLand: earthTexture() },
+    uniforms: { uTime: T, ...camUniforms(cam), uD: [front, 0.85, 1.0, FINAL() ? 1 : 0], uE: [...SF, 1.0], uF: [...sun, 1.0] } },
+    { bloom: 0.6, thresh: 0.9, exposure: 1.1, letterbox: LB, vignette: 0.55, grain: 0, t: T, fade: smooth(86.0, 87.2, k) * (1 - smooth(99.2, 100, k)) });
+  blit();
+}
+
 // ---------------------------------------------------------------- chapter
 chapter("ch3", 100, (k, T) => {
-  if (k < 72) {
-    boardScene(k, T);
-  } else {
-    // placeholder for later sections
-  }
+  if (k < 72) boardScene(k, T);
+  else if (k < 86) wordsScene(k, T);
+  else earthScene(k, T);
+  if (k > 60 && k < 72) scoreText(k);
   chapterCard(k, "III", "신의 한 수");
   // captions (local seconds)
   caption(k, 6.8, 19.2, (a, u) => capT("2016년 3월 · 서울", a, u));
