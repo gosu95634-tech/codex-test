@@ -17,6 +17,6 @@ html, body { margin: 0; background: #000; } canvas { display: block; }
 <script src="overlay.js"></script>
 <script src="timeline.js"></script>
 <script>
-window.ready = async () => { await Promise.all(["SerifL", "SerifM", "SerifB", "SansL", "Corm", "CormI", "CormSB"].map(f => document.fonts.load(`40px "${f}"`, "가A"))); return { fonts: [...document.fonts].filter(f => f.status === "loaded").length, hdr: GL.hdr }; };
+window.ready = async () => { await Promise.all(["SerifL", "SerifM", "SerifB", "SansL", "Corm", "CormI", "CormSB"].map(f => document.fonts.load(`40px "${f}"`, "가A"))); return { fonts: [...document.fonts].filter(f => f.status === "loaded").length, hdr: GL.hdr, renderer: GL.renderer }; };
 </script>
 </body></html>

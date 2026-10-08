@@ -1,0 +1,8 @@
+{
+  "name": "agi-film",
+  "private": true,
+  "description": "「인류의 마지막 발명」 renderer",
+  "dependencies": {
+    "playwright": "1.56.1"
+  }
+}

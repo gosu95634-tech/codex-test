@@ -5,6 +5,8 @@ const GL = (() => {
   const gl = canvas.getContext("webgl2", { preserveDrawingBuffer: true, antialias: false, premultipliedAlpha: false });
   if (!gl) throw new Error("WebGL2 unavailable");
   const hdr = !!gl.getExtension("EXT_color_buffer_float");
+  const dbg = gl.getExtension("WEBGL_debug_renderer_info");
+  const renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
   gl.getExtension("OES_texture_float_linear");
 
   const VS = `#version 300 es
@@ -38,7 +40,7 @@ in vec2 p; out vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p,
     for (const [name, v] of Object.entries(uniforms)) {
       const loc = prog.u[name]; if (!loc) continue;
       if (typeof v === "number") gl.uniform1f(loc, v);
-      else if (v.length === 2) gl.uniform2fv(loc, v); else if (v.length === 3) gl.uniform3fv(loc, v); else if (v.length === 4) gl.uniform4fv(loc, v); else if (v.length === 9) gl.uniformMatrix3fv(loc, false, v);
+      else if (v.length === 2) gl.uniform2fv(loc, v); else if (v.length === 3) gl.uniform3fv(loc, v); else if (v.length === 4) gl.uniform4fv(loc, v); else if (v.length === 9 || (v.length > 16 && v.length % 9 === 0)) gl.uniformMatrix3fv(loc, false, v);
       else gl.uniform4fv(loc, v);
     }
     gl.bindBuffer(gl.ARRAY_BUFFER, tri); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
@@ -76,5 +78,5 @@ in vec2 p; out vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p,
     }, { uScene: sc.tex, uBloomTex: a.tex, uRays: r.tex });
     return canvas;
   }
-  return { canvas, gl, frame, setBoard, hdr };
+  return { canvas, gl, frame, setBoard, hdr, renderer };
 })();

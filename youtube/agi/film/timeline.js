@@ -15,8 +15,20 @@ function caption(t, t0, t1, draw) {
 const capB = (s, a, u, o2 = {}) => line(s, W / 2, H - BAR / 2, { size: 40, glow: 8, alpha: a, spacing: 0.2 - 0.06 * ease(u * 2), blur: (1 - a) * 4, ...o2 });
 const capT = (s, a, u, o2 = {}) => line(s, W / 2, BAR / 2, { size: 26, color: GOLD, glow: 6, alpha: a, spacing: 0.6 - 0.1 * ease(u * 2), blur: (1 - a) * 3, ...o2 });
 
+// Ring orientations for SHADERS.heavens, column-major mat3 x6 (matches rx*ry*rz in the old GLSL ringM).
+function heavensRings(spin) {
+  const rx = a => { const c = Math.cos(a), s = Math.sin(a); return [1, 0, 0, 0, c, s, 0, -s, c]; };
+  const ry = a => { const c = Math.cos(a), s = Math.sin(a); return [c, 0, -s, 0, 1, 0, s, 0, c]; };
+  const rz = a => { const c = Math.cos(a), s = Math.sin(a); return [c, s, 0, -s, c, 0, 0, 0, 1]; };
+  const mul = (A, B) => { const R = new Array(9); for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) { let v = 0; for (let k = 0; k < 3; k++) v += A[k * 3 + i] * B[j * 3 + k]; R[j * 3 + i] = v; } return R; };
+  const out = [];
+  for (let i = 0; i < 6; i++) out.push(...mul(mul(rx(1.0 + i * 0.83 + spin * (0.05 + i * 0.011)), ry(i * 1.27 + spin * (0.03 - i * 0.008))), rz(i * 0.52)));
+  return out;
+}
 // ---------- cold open (0–40 s): a tiny human on a ridge; the camera lifts its gaze; the being finds the viewer
 const ENT = { pos: [0, 2700, 5600], S: 1250 };
+const SOCK_HEAVENS = (() => { const [x, y, z] = ENT.pos, l = Math.hypot(x, y, z); return [-x, -y, -z - 0.25 * l]; })(); // eye socket faces the land
+const RING_PHASE = 383.55; // searched so no ring is edge-on across the pupil during 16–33 s (min |n·view| = 0.37)
 function ridgeY(x) { return 1.15 + 0.22 * Math.sin(x * 0.21) + 0.1 * Math.sin(x * 0.9 + 1) - 0.0016 * x * x; }
 function drawRidge(cam) {
   const pts = []; for (let x = -60; x <= 60; x += 0.5) { const q = project(cam, [x, ridgeY(x), 14]); if (q) pts.push(q); }
@@ -50,7 +62,7 @@ function coldOpen(t) {
     const eyeOpen = smooth(12, 15.5, t), ringOpen = smooth(8.5, 12.5, t), gaze = smooth(16, 18.6, t);
     const core = 1.0 + 1.6 * smooth(27, 32.5, t), white = smooth(31.2, 33, t);
     const q = project(cam, ENT.pos), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.9;
-    GL.frame({ name: "heavens", fs: SHADERS.heavens, scale: 0.7, uniforms: { uTime: t, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0.6], uB: [t * 0.06, gaze, t * 0.012, 1.0], uC: [...ENT.pos, ENT.S] } },
+    GL.frame({ name: "heavens", fs: SHADERS.heavens, scale: 0.7, uniforms: { uTime: t, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0.6], uB: [t * 0.06, gaze, t * 0.012, 1.0], uC: [...ENT.pos, ENT.S], uRing: heavensRings(RING_PHASE + t * 0.06), uSock: SOCK_HEAVENS } },
       { bloom: 0.45 + 0.35 * smooth(27, 32, t), thresh: 1.4, exposure: 0.95 + 0.6 * smooth(28, 33, t), rays: [rx, ry, 0.2 + 0.45 * smooth(26, 32, t)], letterbox: LB, vignette: 0.65, lift: white, t });
     o.drawImage(GL.canvas, 0, 0);
     if (tilt < 0.98) { o.save(); o.beginPath(); o.rect(0, BAR, W, H - 2 * BAR); o.clip(); drawRidge(cam); drawFigure(cam, t); o.restore(); }
@@ -77,4 +89,5 @@ function drawFrame(t) {
   for (const [t0, t1, fn] of SEGMENTS) if (t >= t0 && t < t1) { fn(t); break; }
   grainOver(Math.floor(t * 24), 0.045);
 }
+window.FILM_DURATION = SEGMENTS[SEGMENTS.length - 1][1];
 window.renderFrame = t => { drawFrame(t); return out.toDataURL("image/jpeg", 0.95).slice(23); };
