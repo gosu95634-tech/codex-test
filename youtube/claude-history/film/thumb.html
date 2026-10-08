@@ -1,0 +1,58 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "Serif"; src: url(../assets/fonts/NotoSerifKR-Black.ttf); }
+@font-face { font-family: "Impact"; src: url(../assets/fonts/BlackHanSans.ttf); }
+@font-face { font-family: "Dela"; src: url(../assets/fonts/DelaGothicOne.ttf); }
+@font-face { font-family: "SansM"; src: url(../assets/fonts/NotoSansKR-Medium.ttf); }
+@font-face { font-family: "SansB"; src: url(../assets/fonts/NotoSansKR-Black.ttf); }
+@font-face { font-family: "Mono"; src: url(../assets/fonts/JetBrainsMono-Bold.ttf); }
+html, body { margin: 0; background: #000; }
+</style></head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script src="lib.js"></script>
+<script>
+const main = document.getElementById("c");
+const mk = () => { const c = document.createElement("canvas"); c.width = W; c.height = H; return [c, c.getContext("2d")]; };
+const [buf, g] = [main, main.getContext("2d")], [tmp, tg] = mk();
+</script>
+<script src="scenes.js"></script>
+<script>
+// Thumbnails are composed for a 168 px-wide phone tile: one subject, ≤ 6 big words, maximum contrast.
+function thumbA() {
+  const t = 3.3;
+  sunburst(g, W * 0.62, H * 0.42, 26, 0.1, INK, "#21140c");
+  halftoneBurst(g, W * 0.62, H * 0.42, 1300, 1.0, 0.2);
+  g.save(); g.globalCompositeOperation = "lighter"; glow(g, W * 0.64, H * 0.3, 900, "rgba(255,120,40,ALPHA)", 0.55); g.restore();
+  drawMecha(g, W * 0.66, H * 0.66, 1.15, t, { eyes: 1, core: 1.4 });
+  drawDario(g, W * 0.27, H + 120, 1000, t, { wind: 1.6 });
+  starFlare(g, W * 0.27 - 16 * 1000 / 560, H + 120 - 500 * 1000 / 560, 1.5);
+  txt(g, "아모데이의", 70, 170, { size: 190, align: "left", fill: null, stroke: ORANGE, lw: 44 });
+  txt(g, "아모데이의", 70, 170, { size: 190, align: "left", fill: null, stroke: INK, lw: 22 });
+  txt(g, "아모데이의", 70, 170, { size: 190, align: "left", fill: PAPER });
+  txt(g, "모험", 70, 380, { size: 230, align: "left", fill: null, stroke: INK, lw: 26 });
+  txt(g, "모험", 70, 380, { size: 230, align: "left", fill: ORANGE });
+  pill("제1화", W - 190, H - 110, 64, { fill: PAPER, fg: INK, font: "SansB" });
+  menace(g, 1700, 170, 170, 5, 0, 1); menace(g, 1820, 380, 130, 5, 0, 2);
+}
+function thumbB() {
+  const t = 2.1;
+  bg("#0d0a0a"); halftoneBurst(g, W * 0.62, H * 0.5, 1300, 0.8, 0.3, "#3a160a", 30);
+  drawOrb(g, W * 0.64, H * 0.52, 300, t, { corona: 2.4, power: 1.6 });
+  scouterHUD(g, W * 0.55, H * 0.5, 1700, 940, t);
+  reticle(g, W * 0.64, H * 0.52, 360, 0.4);
+  cracks(g, W * 0.64, H * 0.52, 0.9, 13, "#fff3e6");
+  txt(g, "전투력", 90, 230, { font: "Impact", size: 200, align: "left", fill: null, stroke: ORANGE, lw: 48 });
+  txt(g, "전투력", 90, 230, { font: "Impact", size: 200, align: "left", fill: null, stroke: INK, lw: 24 });
+  txt(g, "전투력", 90, 230, { font: "Impact", size: 200, align: "left", fill: PAPER });
+  txt(g, "53만?!", 90, 470, { font: "Impact", size: 280, align: "left", fill: null, stroke: PAPER, lw: 60 });
+  txt(g, "53만?!", 90, 470, { font: "Impact", size: 280, align: "left", fill: null, stroke: INK, lw: 30 });
+  txt(g, "53만?!", 90, 470, { font: "Impact", size: 280, align: "left", fill: "#ff3b2f" });
+  zoomed(1, W * 0.66, H * 0.86, () => slamText(g, "측정 불가", W * 0.66, H * 0.86, 150, { fill: "#ff3b2f", outer: PAPER, rot: -0.06 }));
+  txt(g, "CLAUDE", W - 120, 120, { font: "Mono", size: 56, align: "right", fill: HUD, ls: 10 });
+}
+window.drawThumb = k => { (k === "A" ? thumbA : thumbB)(); return main.toDataURL("image/png").slice(22); };
+window.ready = async () => { await Promise.all(["Serif", "Impact", "Dela", "SansM", "SansB", "Mono"].map(f => document.fonts.load(`40px "${f}"`, "가A゙ゴ✓"))); return [...document.fonts].filter(f => f.status === "loaded").length; };
+</script>
+</body></html>

@@ -47,6 +47,17 @@
 
 **TODO (쇼츠 #3 전):** Anthropic의 1차 자료(Claude 3.7 Sonnet 발표문의 포켓몬 언급)를 확인하고, 시간 수치를 "시청자 집계"로 표시할지 정하기.
 
-## 4. 모델 연표 (본편용)
+## 4. 모델 연표 (「아모데이의 모험」 제1화에 사용)
 
-**TODO (본편 전):** 창업(2021), Claude 1(2023-03), Claude 2(2023-07), Claude 3(2024-03), 3.5 Sonnet(2024-06), 3.7 Sonnet과 Claude Code(2025-02), Claude 4(2025-05) 이후 2026년 현재까지를 1차 자료로 확인하기.
+| 사실 | 출처 |
+|---|---|
+| 2021년 다리오·다니엘라 아모데이 남매가 OpenAI 출신 동료들과 Anthropic 공동 창업 (월은 자료마다 다름) | [2차] https://en.wikipedia.org/wiki/Dario_Amodei, https://fortune.com/ranking/most-powerful-people/2024/daniela-dario-amodei |
+| Claude 공개 2023-03-14 (Claude, Claude Instant) | [1차] https://www.anthropic.com/news/introducing-claude |
+| Claude 2 공개 2023-07-11 | [1차] https://anthropic.com/news/claude-2 |
+| Claude 3 패밀리(Haiku·Sonnet·Opus) 2024-03 | [1차] https://assets.anthropic.com/m/61e7d27f8c8f5919/original/Claude-3-Model-Card.pdf |
+| Golden Gate Claude 2024-05-23, 24시간 공개 | [1차] 위 1번 |
+| Claude 3.5 Sonnet 2024-06, Claude 3.7 Sonnet과 Claude Code 리서치 프리뷰 2025-02, Claude 4 (Sonnet 4·Opus 4) 2025-05, Sonnet 4.5 2025-09-29 | [2차] 검색 요약 (릴리스 노트·위키백과 인용) |
+| Claude 5 세대 시작: Fable 5 공개 2026-06-09 | [2차] https://techcrunch.com/2026/06/09/anthropics-claude-fable-5-is-a-version-of-mythos-the-public-can-access-today/ |
+| Opus 5.5 2026-09-22, Sonnet 5.5 2026-09-28, Haiku 5.5 2026-10-07 | [2차] 검색 요약 (https://platform.claude.com/docs/en/release-notes/overview 인용) |
+
+영상에서 "3.5, 3.7, 4, 4.5, 5, Fable, 5.5"로 표기한 연월은 이 표를 따랐어요. 스카우터 전투력 숫자(53만 등)는 패러디이고 실제 벤치마크가 아니에요.
