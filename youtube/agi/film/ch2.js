@@ -429,14 +429,14 @@ void main(){
     for (let i = 0; i < N; i++) {
       const word = i < NWORD;
       const birth = 18.4 + Math.pow(r(), 0.85) * 5.6;
-      const tgt = word ? WORD.pts[i] : null;
+      const tgt = word ? WORD.pts[i] : null; const nst = buildTree().length;
       E.push({
         word, birth, v: 0.32 + r() * 0.5, spread: 0.05 + r() * 0.12,
         ph: [r() * 6.28, r() * 6.28, r() * 6.28, r() * 6.28], fr: [0.7 + r() * 1.3, 1.1 + r() * 1.6, 0.5 + r() * 0.9],
         R: 0.25 + Math.pow(r(), 0.7) * 1.25, th0: r() * 6.28, om: 0.45 + r() * 0.5, tilt: (r() - 0.5) * 0.7, zR: (r() - 0.5) * 0.5,
         tgt, a0: word ? 24.6 + (tgt[0] * 0.5 + 0.5) * 1.5 + r() * 0.9 : 0, dur: 1.5 + r() * 0.7,
         size: 0.8 + Math.pow(r(), 2.5) * 2.2, temp: r(), flick: 3 + r() * 9, life: 2.2 + r() * 3.5,
-        star: -1,
+        star: word && i < nst ? i : -1,
       });
     }
     EM = E; return E;
@@ -524,17 +524,331 @@ void main(){
     blit();
   }
 
-  // ---------------------------------------------------------------- sky placeholders (filled in below)
+  // ---------------------------------------------------------------- C/D: the sky, the neuron constellation, winter
   const SKY_F0 = norm([-0.28, 0.62, -1.0]), SKY_FOV0 = 1.35;
-  function SKY_STARS_SCREEN(k) { return null; }
+  const SKB = (() => { const r = norm(cross(SKY_F0, [0, 1, 0])), u = cross(r, SKY_F0); return { r, u }; })();
+  function skyCam(k) {
+    const u = clamp((k - 36) / 28), yaw = 0.05 * easeIO(u);
+    const f = norm([SKY_F0[0] * Math.cos(yaw) - SKY_F0[2] * Math.sin(yaw), SKY_F0[1], SKY_F0[0] * Math.sin(yaw) + SKY_F0[2] * Math.cos(yaw)]);
+    return camDir([0, 0, 0], k < 36 ? SKY_F0 : f, k < 36 ? SKY_FOV0 : lerp(SKY_FOV0, 1.55, easeIO(u)));
+  }
+  // neuron constellation: soma, branching dendrites, one long axon with terminals (atlas-plane units)
+  let TREE = null;
+  function buildTree() {
+    if (TREE) return TREE;
+    const r = rng(1958), nodes = [{ x: 0.2, y: -0.2, p: -1, d: 0, t: 36.4, m: 1 }];
+    const grow = (pi, ang, len, depth) => {
+      const P = nodes[pi]; const x = P.x + Math.cos(ang) * len, y = P.y + Math.sin(ang) * len;
+      nodes.push({ x, y, p: pi, d: depth, t: P.t + 0.35 + len * 0.28, m: 0.75 - depth * 0.15 }); const id = nodes.length - 1;
+      if (depth < 3) { const n = depth < 2 ? 2 : (r() < 0.6 ? 2 : 1); for (let j = 0; j < n; j++) grow(id, ang + (j - (n - 1) / 2) * (0.6 + r() * 0.3) + (r() - 0.5) * 0.3, len * (0.62 + r() * 0.15), depth + 1); }
+    };
+    const prim = 6;
+    for (let i = 0; i < prim; i++) { const a = 0.9 + i * (4.6 / prim) + (r() - 0.5) * 0.3; grow(0, a, 1.0 + r() * 0.35, 1); }
+    // axon toward lower right
+    let pi = 0, ang = -0.35;
+    for (let s = 0; s < 4; s++) { const P = nodes[pi]; ang += (r() - 0.5) * 0.25; nodes.push({ x: P.x + Math.cos(ang) * 0.9, y: P.y + Math.sin(ang) * 0.9, p: pi, d: 1, t: P.t + 0.45, m: 0.6 }); pi = nodes.length - 1; }
+    for (let j = 0; j < 4; j++) { const P = nodes[pi]; const a = ang + (j - 1.5) * 0.45; nodes.push({ x: P.x + Math.cos(a) * 0.5, y: P.y + Math.sin(a) * 0.5, p: pi, d: 3, t: P.t + 0.4, m: 0.5 }); }
+    const sc = Math.max(...nodes.map(n => Math.max(Math.abs(n.x) / 5.2, Math.abs(n.y) / 2.6)));
+    for (const n of nodes) { n.x /= sc; n.y /= sc; n.t = Math.min(n.t, 42.0); }
+    TREE = nodes; return nodes;
+  }
+  const atlasW = (x, y) => add3(mul3(SKY_F0, 10), add3(mul3(SKB.r, x), mul3(SKB.u, y)));
+  function SKY_STARS_SCREEN(k) {
+    const T = buildTree(), cam = skyCam(36);
+    return T.map(n => { const p = project(cam, atlasW(n.x, n.y)); return p ? [p[0], p[1], 2.5 * n.m] : null; });
+  }
+  const FROST = `
+float fern(vec2 uv, vec2 c, float s, float seed){
+  vec2 q=uv*s; vec2 id=floor(q); float f=0.;
+  for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 cid=id+vec2(i,j); float h=hash12(cid+seed);
+    vec2 o=cid+.5+(vec2(hash12(cid+seed+3.),hash12(cid+seed+7.))-.5)*.6; vec2 g=q-o;
+    vec2 cw=(o/s)-c; float a=atan(-cw.y,-cw.x)+(h-.5)*1.3; vec2 dir=vec2(cos(a),sin(a)), pr=vec2(-dir.y,dir.x);
+    float al=dot(g,dir), ac=dot(g,pr); float len=.75;
+    if(al<-.1||al>len) continue;
+    float w=1.-al/len;
+    float stem=smoothstep(.035,0.,abs(ac));
+    float s1=al-abs(ac)*.6; float bar=smoothstep(.09,.0,abs(fract(s1*7.+h*3.)-.5)-.4)*step(abs(ac),.32*w)*smoothstep(0.,.02,abs(ac));
+    f=max(f,(stem+bar*.7)*w); }
+  return f; }
+float frost(vec2 frag, float grow, out vec2 nrm){
+  vec2 uv=frag/uRes.y; vec2 c=vec2(.5*uRes.x/uRes.y,.5);
+  float ax=.5*uRes.x/uRes.y, ay=.5-.128; vec2 d=uv-c;
+  float e=min(ax-abs(d.x),ay-abs(d.y)); float n=fbm(vec3(uv*2.5,1.));
+  float front=grow*.42+(n-.5)*.14; nrm=vec2(0.);
+  if(e>front+.04) return 0.;
+  float mask=smoothstep(front+.04,front-.04,e);
+  float f=max(max(fern(uv,c,7.,1.),fern(uv,c,15.,5.)*.8),fern(uv,c,33.,9.)*.6);
+  float fine=noise(vec3(uv*400.,2.));
+  nrm=vec2(noise(vec3(uv*60.,4.))-.5,noise(vec3(uv*60.,8.))-.5)*mask;
+  return clamp(mask*(.22+f*.85+fine*.12*mask),0.,1.4); }
+`;
+  const SKY = COMMON + FROST + `
+uniform sampler2D uSeg; uniform vec4 uD; // winter, frost grow, exposure drain, star amount
+void main(){
+  vec2 fr=gl_FragCoord.xy; vec2 nr; float fz=frost(fr,uD.y,nr);
+  vec3 rd=camRay(fr+nr*40.*fz);
+  vec3 neb=nebula(rd,vec3(.035,.026,.055),vec3(.30,.19,.08))*.7;
+  vec3 col=neb*(1.-uD.x*.6)+stars(rd,uD.w);
+  col+=texture(uSeg,(fr+nr*30.*fz)/uRes).rgb;
+  float l=dot(col,vec3(.3,.55,.15)); col=mix(col,vec3(l)*vec3(.92,.96,1.),uD.x*.85);
+  col*=1.-uD.z;
+  vec3 fc=vec3(.55,.58,.62)*(.25+.75*uD.x);
+  col=mix(col,fc*(.35+.4*fz)+col*.6,clamp(fz,0.,1.)*.8);
+  col+=vec3(1.)*pow(hash12(floor(fr/2.)),60.)*fz*2.;
+  fragColor=vec4(col,1.); }`;
+  SHADERS.ch2_sky = SKY;
+  function snow(k, n, I, seed, k0) {
+    for (let i = 0; i < n; i++) {
+      const z = 0.3 + hsh(i, seed) * 1.0, sp = 40 + 70 * z;
+      const x = (hsh(i, seed + 1) * 2100 - 90 + Math.sin(k * 0.6 + i) * 25 * z) % 2100;
+      const y = ((hsh(i, seed + 2) * 1300 + (k - k0) * sp) % 1300) - 110;
+      const r = 0.7 + 2.4 * z * z, a = I * (0.4 + 0.6 * z);
+      seg(x, y - sp / 48, x, y, a * 0.9, a * 0.94, a, r);
+    }
+  }
+  function sceneSky(k, T, alpha) {
+    const cam = skyCam(k), sc = SCALE(), N = buildTree();
+    const winter = sm(46, 52, k), drain = 0.55 * sm(52, 63, k);
+    segReset();
+    const P = N.map(n => project(cam, atlasW(n.x, n.y)));
+    const gold = [1.0, 0.72, 0.38], silver = [0.85, 0.9, 1.0];
+    const cc = mix3(gold, silver, winter);
+    N.forEach((n, i) => {
+      const p = P[i]; if (!p) return;
+      const on = sm(35.2, 36.4, k), fl = sm(n.t, n.t + 0.4, k);
+      const tw = winter > 0.5 ? 1 : 0.8 + 0.2 * Math.sin(T * (2 + i % 5) + i);
+      const brk = k > 56 ? sm(56 + hsh(i, 9) * 6, 57 + hsh(i, 9) * 6, k) * (i % 3 === 0 ? 0.85 : 0.3) : 0;
+      const I = n.m * (1.4 * on + 2.5 * fl * Math.exp(-Math.max(k - n.t - 0.3, 0) * 1.5) + 0.8 * fl) * tw * (1 - brk);
+      seg(p[0], p[1], p[0], p[1], cc[0] * I, cc[1] * I, cc[2] * I, 1.4 + n.m * 1.8);
+      if (n.p >= 0) {
+        const q = P[n.p]; if (!q) return;
+        const u = clamp((k - (n.t - 0.8)) / 0.8); if (u <= 0) return;
+        const ex = lerp(q[0], p[0], ease(u)), ey = lerp(q[1], p[1], ease(u)), tI = 0.55 * (1 - brk) * (1 - 0.35 * winter);
+        seg(q[0], q[1], ex, ey, cc[0] * tI, cc[1] * tI, cc[2] * tI, 0.9);
+        if (winter > 0) { const len = Math.hypot(ex - q[0], ey - q[1]), nx = -(ey - q[1]) / (len || 1), ny = (ex - q[0]) / (len || 1);
+          for (let j = 1; j < 6; j++) { const s = j / 6, hx = lerp(q[0], ex, s), hy = lerp(q[1], ey, s), hl = 7 * winter * (0.5 + hsh(i * 7 + j, 4)), a = 0.25 * winter * (1 - brk);
+            seg(hx, hy, hx + nx * hl, hy + ny * hl, a, a, a * 1.1, 0.5); seg(hx, hy, hx - nx * hl * 0.7, hy - ny * hl * 0.7, a, a, a * 1.1, 0.5); } }
+      }
+    });
+    if (k > 47) snow(k, 420, 0.5 * sm(47, 51, k), 21, 47);
+    const tex = SEG.render(sc);
+    GL.frame({ name: "ch2_sky", fs: SKY, scale: sc, textures: { uSeg: tex },
+      uniforms: { uTime: T, ...camUniforms(cam), uD: [winter, sm(47, 61, k) * 0.9 + 0.6 * sm(61.5, 64.5, k), drain, 1 - 0.7 * sm(50, 62, k)] } },
+      { bloom: 0.75, thresh: 0.9, exposure: 1.1, letterbox: LB, vignette: 0.55, ca: 0.0012, t: T, fade: sm(35.2, 36.0, k) > 0 ? 1 : 1 });
+    o.save(); o.globalAlpha = alpha; blit(); o.restore();
+  }
+
+  // ---------------------------------------------------------------- E: the frozen hall, the marble king (impact 70.0)
+  const HALL = COMMON + `
+uniform vec4 uD; // king angle, time since impact, warm leak, quality
+uniform vec4 uM; // melt, exposure, -, -
+uniform sampler2D uSeg;
+float sdB2(vec2 p, vec2 b){ vec2 d=abs(p)-b; return length(max(d,0.))+min(max(d.x,d.y),0.); }
+float sdBox(vec3 p, vec3 b){ vec3 q=abs(p)-b; return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.); }
+float smin(float a,float b,float k){ float h=clamp(.5+.5*(b-a)/k,0.,1.); return mix(b,a,h)-k*h*(1.-h); }
+float king(vec3 p){
+  vec2 q=vec2(length(p.xz),p.y);
+  float d=sdB2(q-vec2(0.,.12),vec2(.6,.12))-.03;
+  d=smin(d,length(q-vec2(.5,.3))-.09,.04);
+  float y=clamp((q.y-.3)/1.8,0.,1.); float r=mix(.44,.22,y)+.03*sin(y*3.14);
+  d=smin(d,max(q.x-r,max(.3-q.y,q.y-2.1)),.06);
+  d=min(d,sdB2(q-vec2(0.,2.14),vec2(.38,.04))-.02);
+  float y2=clamp((q.y-2.2)/.45,0.,1.); d=smin(d,max(q.x-mix(.22,.36,y2),max(2.2-q.y,q.y-2.66)),.04);
+  d=min(d,max(length(q-vec2(0.,2.6))-.33,2.62-q.y));
+  d=min(d,length(q-vec2(0.,2.98))-.07);
+  d=min(d,sdBox(p-vec3(0.,3.22,0.),vec3(.05,.22,.05))-.01);
+  d=min(d,sdBox(p-vec3(0.,3.28,0.),vec3(.17,.05,.05))-.01);
+  return d; }
+const vec3 KP=vec3(0.,0.,0.);
+float mapK(vec3 p){ vec3 piv=KP+vec3(.6,0.,0.); vec3 q=p-piv; q.xy=rot(uD.x)*q.xy; q+=piv-KP; return king(q); }
+float mapH(vec3 p, out float m){
+  float d=mapK(p); m=1.;
+  vec3 c=p; c.z=mod(c.z+3.,6.)-3.; c.x=abs(c.x)-7.;
+  float col=length(c.xz)-.55+.02*cos(atan(c.z,c.x)*16.); col=min(col,sdBox(c-vec3(0.,.2,0.),vec3(.8,.2,.8)));
+  if(col<d){ d=col; m=2.; }
+  float wall=10.5-abs(p.x); if(wall<d){ d=wall; m=3.; }
+  return d; }
+float mH(vec3 p){ float m; return mapH(p,m); }
+vec3 nH(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=.002; return normalize(k.xyy*mH(p+k.xyy*h)+k.yyx*mH(p+k.yyx*h)+k.yxy*mH(p+k.yxy*h)+k.xxx*mH(p+k.xxx*h)); }
+float crack(vec2 p, vec2 ip, float tt){
+  if(tt<=0.) return 0.;
+  vec2 d=p-ip; float r=length(d); float R=min(tt*14.,9.)*(1.-.0*r);
+  if(r>R+.3) return 0.;
+  float a=atan(d.y,d.x); float rad=0.;
+  for(int i=0;i<9;i++){ float fi=float(i); float aa=fi*.7+sin(fi*3.1)*.3+r*.08*sin(fi+r*1.3); float da=abs(mod(a-aa+3.14159,6.28318)-3.14159)*r; rad=max(rad,smoothstep(.035,0.,da)); }
+  vec2 g=p*1.3; vec2 id=floor(g); float md=9., md2=9.;
+  for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 o=id+vec2(i,j); o+=vec2(hash12(o),hash12(o+5.)); float dd=length(g-o); if(dd<md){ md2=md; md=dd; } else if(dd<md2) md2=dd; }
+  float vor=smoothstep(.05,0.,md2-md)*smoothstep(R*.8,0.,r);
+  return max(rad,vor*.8)*smoothstep(R+.3,R-.3,r); }
+vec3 sky(vec3 rd){ return vec3(.02,.022,.028)+vec3(.12,.13,.15)*pow(max(rd.y,0.),2.)*.3; }
+void main(){
+  vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
+  vec3 L=normalize(vec3(-.55,.75,.35)); vec3 LC=vec3(.85,.9,1.)*1.4;
+  vec3 ip=KP+vec3(3.7,0.,0.);
+  float t=.05; float m=0.; bool hit=false; int NS=uD.w>.5?160:100;
+  float tF= rd.y<0.? -ro.y/rd.y : 1e9;
+  for(int i=0;i<160;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=mapH(p,m); if(d<.001*t){ hit=true; break; } t+=d*.9; if(t>min(tF,60.)) break; }
+  vec3 col=sky(rd); float tt=hit? t : tF;
+  if(tt<60.){ vec3 p=ro+rd*tt; vec3 n; vec3 alb; float gl=40.;
+    if(!hit || t>=tF){ n=vec3(0,1,0); vec2 c=floor(p.xz); float chk=mod(c.x+c.y,2.);
+      alb=mix(vec3(.62,.62,.64),vec3(.06,.065,.075),chk)*(.85+.15*fbm(vec3(p.xz*2.,1.)));
+      float fr=smoothstep(.4,.7,fbm(vec3(p.xz*1.5,3.)))*(1.-uM.x); alb=mix(alb,vec3(.8,.83,.88),fr*.6); gl=mix(300.,30.,fr);
+      float ck=crack(p.xz,ip.xz,uD.y);
+      alb=mix(alb,vec3(1.),ck*.7);
+      col=alb*(max(dot(n,L),0.)*LC*.35+.05);
+      vec3 rr=reflect(rd,n); col+=sky(rr)*.4+vec3(.9,.95,1.)*pow(max(dot(rr,L),0.),gl)*.8;
+      col+=vec3(1.,.62,.28)*ck*(.6+3.5*uD.z)*(.7+.3*noise(vec3(p.xz*8.,uTime)));
+      col+=vec3(1.,.6,.25)*uD.z*.4*exp(-length(p.xz-ip.xz)*.25);
+    } else { n=nH(p);
+      if(m==1.){ alb=vec3(.86,.85,.83)*(.85+.15*smoothstep(.45,.5,abs(fbm(p*3.)-.5)+.45)); gl=60.; }
+      else if(m==2.){ alb=vec3(.42,.43,.46)*(.8+.2*fbm(p*4.)); gl=20.; }
+      else { alb=vec3(.1,.1,.11); gl=10.; }
+      float dif=max(dot(n,L),0.); float sss=m==1.? .25*max(dot(n,-L)*.5+.5,0.) : 0.;
+      col=alb*(dif*LC*.9+sss*vec3(.6,.65,.75)+vec3(.05,.055,.07)*(.5+.5*n.y));
+      col+=vec3(.9,.95,1.)*pow(max(dot(reflect(rd,n),L),0.),gl)*.5;
+      col+=alb*vec3(1.,.6,.25)*uD.z*1.2*exp(-length(p-ip)*.35)*max(-n.y*.0+.5,0.);
+      if(m==3.){ vec2 w=vec2(mod(p.z+3.,6.)-3.,p.y-6.); float win=step(abs(w.x),1.2)*step(abs(w.y),3.)*step(0.,p.x*sign(-L.x)); col+=vec3(.75,.8,.9)*win*1.6; }
+    }
+    float fog=1.-exp(-tt*.05); col=mix(col,vec3(.07,.075,.085),fog);
+  }
+  // shafts from the windows
+  float sh=0.; for(int i=0;i<24;i++){ float s=(float(i)+hash12(gl_FragCoord.xy))/24.*min(tt,30.); vec3 p=ro+rd*s; float k=(10.4-p.x*sign(-L.x)*-1.)/max(abs(L.x),.1);
+    vec3 w=p+L*((-10.4-p.x)/L.x); vec2 ww=vec2(mod(w.z+3.,6.)-3.,w.y-6.); sh+=step(abs(ww.x),1.1)*step(abs(ww.y),3.)*step(0.,w.y); }
+  col+=vec3(.6,.65,.75)*sh/24.*min(tt,30.)*.012;
+  col+=texture(uSeg,gl_FragCoord.xy/uRes).rgb;
+  fragColor=vec4(col*uM.y,1.); }`;
+  SHADERS.ch2_hall = HALL;
+  const TH_F = Math.PI / 2 - Math.atan(0.25 / 3.2);
+  function kingAngle(k) {
+    if (k < 66) return 0;
+    if (k < 69) return 0.025 * sm(66, 68.5, k) * Math.sin((k - 66) * 4.2) * Math.sin((k - 66) * 1.1);
+    if (k < 70) { const u = (k - 69); return 0.02 + (TH_F - 0.02) * Math.pow(u, 2.6); }
+    if (k < 70.5) { const u = k - 70; return TH_F - 0.06 * Math.abs(Math.sin(u * Math.PI / 0.25)) * Math.exp(-u * 6); }
+    return TH_F;
+  }
+  function hallCam(k) {
+    const u = easeIO(clamp((k - 63) / 13));
+    const pos = mix3([-2.6, 1.5, 9.5], [-1.2, 2.6, 7.2], u);
+    return camAt(pos, mix3([0.6, 1.6, 0], [2.4, 0.4, 0], easeIO(clamp((k - 70.5) / 5.5))), 1.25);
+  }
+  function sceneHall(k, T, alpha) {
+    const cam = hallCam(k), sc = SCALE();
+    segReset();
+    snow(k, 300, 0.35 * (1 - sm(75, 77, k)), 31, 63);
+    if (k > 70) { const ip = project(cam, [3.7, 0.05, 0]); if (ip) { const r = rng(70); for (let i = 0; i < 220; i++) { const a = r() * 6.28, v = 60 + r() * 380, tt = k - 70, up = 120 + r() * 260;
+      const x = ip[0] + Math.cos(a) * v * (1 - Math.exp(-tt * 2.5)) / 2.5 * 2, y = ip[1] - up * (1 - Math.exp(-tt * 2)) / 2 * 2 + 60 * tt * tt;
+      const I = Math.exp(-tt * 1.4) * 1.2; seg(x, y, x + 3, y + 2, I, I, I * 1.05, 1.1); } } }
+    if (k > 75.5) { const r = rng(75); for (let i = 0; i < 120; i++) { const x = r() * 1920, y0 = r() * 900, sp = 300 + r() * 500; const y = (y0 + (k - 75.5) * sp) % 1100; const I = 1.2 * sm(75.5, 77, k);
+      seg(x, y - sp / 30, x, y, I, I * 0.75, I * 0.45, 1.3); } }
+    const tex = SEG.render(sc);
+    const warm = sm(71, 76.5, k), lp = project(cam, [3.7, 0.2, 0]);
+    GL.frame({ name: "ch2_hall", fs: HALL, scale: sc, textures: { uSeg: tex },
+      uniforms: { uTime: T, ...camUniforms(cam), uD: [kingAngle(k), Math.max(k - 70, 0), warm, Q()], uM: [sm(75.5, 77.5, k), 1 + 1.6 * sm(76, 78, k), 0, 0] } },
+      { bloom: 0.8, thresh: 1.0, exposure: 1.1, rays: lp ? [lp[0] / W, 1 - lp[1] / H, 0.35 * warm] : [0.5, 0.5, 0], letterbox: LB, vignette: 0.55, t: T, lift: 0.5 * sm(76.5, 78, k) });
+    o.save(); o.globalAlpha = alpha; blit(); o.restore();
+  }
+
+  // ---------------------------------------------------------------- F: the cathedral of light, the rose window opens (peak 82)
+  const NAVE = COMMON + `
+uniform vec4 uD; // ribs lit, rose open, focus, warmth
+uniform vec4 uM; // quality, fade, -, -
+uniform sampler2D uSeg;
+const float ZE=-46.;
+float arch(vec2 q, float span, float y0){ // pointed (equilateral-ish) arch: distance to the curve, shaft below the springing
+  q.x=abs(q.x); float hs=span*.5; float R=span*.95; vec2 c=vec2(hs-R,y0);
+  if(q.y<y0) return abs(q.x-hs);
+  float ang=atan(q.y-y0,q.x-c.x); float top=asin(clamp(sqrt(max(R*R-(hs-R)*(hs-R),0.))/R,0.,1.));
+  if(ang>top){ vec2 crown=vec2(0.,y0+sqrt(max(R*R-c.x*c.x,0.))); return length(q-crown); }
+  return abs(length(q-c)-R); }
+float ribs(vec3 p){
+  float z=mod(p.z,6.)-3.; float zc=p.z-z;
+  float tr=length(vec2(arch(p.xy,9.,6.),p.z-(zc+3.)))-.07; tr=min(tr,length(vec2(arch(p.xy,9.,6.),p.z-(zc-3.)))-.07);
+  vec2 dg=normalize(vec2(4.5,3.)); float s1=dot(vec2(p.x,z),dg), o1=dot(vec2(p.x,z),vec2(-dg.y,dg.x));
+  float s2=dot(vec2(p.x,z),vec2(dg.x,-dg.y)), o2=dot(vec2(p.x,z),vec2(dg.y,dg.x));
+  float dgr=min(length(vec2(arch(vec2(s1*9./10.8,p.y),9.,6.),o1)),length(vec2(arch(vec2(s2*9./10.8,p.y),9.,6.),o2)))-.05;
+  float ridge=length(vec2(p.x,p.y-13.75))-.05;
+  return min(min(tr,dgr),ridge); }
+float piers(vec3 p){ vec3 q=p; q.z=mod(q.z,6.)-3.; q.x=abs(q.x)-4.5; return length(q.xz)-.42; }
+vec3 rose(vec2 q, float open, float focus){
+  float r=length(q)/4.2; float a=atan(q.y,q.x); if(r>1.08) return vec3(0);
+  float bl=mix(.25,.012,focus);
+  float tw=(1.-open)*3.*(1.-r);
+  float pet=abs(sin((a+tw)*6.)); float pet2=abs(sin((a-tw)*12.+.5));
+  float trac=smoothstep(bl*6.,0.,abs(r-1.)-.02)+smoothstep(bl*4.,0.,abs(r-.35)-.015)+smoothstep(bl*4.,0.,abs(r-.68)-.012);
+  trac+=smoothstep(.06+bl,.0,pet*r-.0)*step(.35,r)*0.;
+  trac+=smoothstep(bl*3.+.03,0.,abs(fract(((a+tw)*12./6.28318))-.5)*r*3.-.0)*step(.35,r)*step(r,1.);
+  float glass=step(r,1.)*(1.-clamp(trac,0.,1.));
+  float lit=smoothstep(open*1.1,open*1.1-.15,r);
+  vec3 gc=mix(vec3(3.2,1.9,.7),vec3(2.4,.5,.2),step(.6,fract(a*12./6.28318+.3))*step(.35,r));
+  gc=mix(gc,vec3(.6,.75,1.6),step(.86,fract(a*6./6.28318+.1))*step(.68,r)*.6);
+  gc=mix(gc,vec3(4.,3.,1.6),step(r,.35));
+  return gc*glass*lit*(.7+.3*pet2)+vec3(.05,.04,.03)*clamp(trac,0.,1.); }
+void main(){
+  vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
+  float t=.1, glow=0.; bool hit=false; int NS=uM.x>.5?180:110; float m=0.;
+  for(int i=0;i<180;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float dr=ribs(p), dp=piers(p), df=p.y, dw=ZE-p.z+0.;
+    float d=min(min(dr,dp),min(df, p.z-ZE)); glow+=exp(-dr*22.)*.02*smoothstep(ZE,ZE+60.*uD.x,p.z+0.)*1.+exp(-dp*30.)*.004;
+    if(d<.002*t){ hit=true; m= d==dr?1.: d==dp?2.: d==df?3.:4.; break; } t+=d*.85; if(t>80.) break; }
+  vec3 p=ro+rd*t; vec3 col=vec3(.004,.003,.003);
+  float ign=uD.x;
+  vec3 gC=vec3(1.,.66,.32);
+  if(hit){
+    if(m==1.) col=gC*4.*ign;
+    else if(m==2.) col=vec3(.09,.07,.05)*(.3+ign)*(1.+.5*sin(p.y*.5));
+    else if(m==3.){ vec2 c=floor(p.xz*.5); col=vec3(.05,.04,.03)*(.6+.4*mod(c.x+c.y,2.))*(.4+ign);
+      vec3 rr=reflect(rd,vec3(0,1,0)); vec2 rq=(p.xy+rr.xy*((ZE-p.z)/min(rr.z,-1e-3)))-vec2(0.,10.); col+=rose(rq,uD.y,uD.z)*.12; }
+    else { vec2 q=p.xy-vec2(0.,10.); col=rose(q,uD.y,uD.z)+vec3(.04,.03,.02)*ign; }
+    col*=exp(-t*.012);
+  }
+  col+=gC*glow*ign*2.;
+  vec3 rp=vec3(0.,10.,ZE); float tl=dot(rp-ro,rd); float dl=length(ro+rd*tl-rp);
+  col+=vec3(1.,.72,.4)*uD.y*(.5/(dl*dl*.08+1.))*.35;
+  float sh=0.; for(int i=0;i<20;i++){ float s=(float(i)+hash12(gl_FragCoord.xy+uTime))/20.*min(t,60.); vec3 q=ro+rd*s; vec3 dir=normalize(rp-q);
+    vec2 w=(q+dir*((ZE-q.z)/min(dir.z,-1e-3))).xy-vec2(0.,10.); sh+=step(length(w),4.2*uD.y)*(.5+.5*noise(vec3(q.xz*.3,uTime*.1))); }
+  col+=vec3(1.,.7,.38)*sh/20.*min(t,60.)*.02*uD.y;
+  col*=1.+uD.w*.4;
+  col+=texture(uSeg,gl_FragCoord.xy/uRes).rgb;
+  fragColor=vec4(col,1.); }`;
+  SHADERS.ch2_nave = NAVE;
+  function naveCam(k) {
+    const u = easeIO(clamp((k - 76) / 14));
+    const pos = [0, lerp(1.8, 2.6, u), lerp(14, -6, u)];
+    return camAt(pos, [0, lerp(5.5, 8.5, u), -46], lerp(1.15, 1.3, u));
+  }
+  function sceneNave(k, T, alpha) {
+    const cam = naveCam(k), sc = SCALE();
+    segReset();
+    const r = rng(2012);
+    for (let i = 0; i < 160; i++) { const x = r() * 1920, y0 = r() * 1100, sp = 250 + r() * 450, y = (y0 + (k - 76) * sp) % 1150 - 40; const I = 0.9 * (1 - sm(79, 83, k)) + 0.1;
+      seg(x, y - sp / 28, x, y, I, I * 0.72, I * 0.42, 1.2); }
+    for (let i = 0; i < 260; i++) { const x = (r() * 1920 + Math.sin(k * 0.3 + i) * 30), y = (r() * 1080 - (k - 76) * (8 + r() * 14)); const I = 0.35 * sm(80, 83, k) * (0.6 + 0.4 * Math.sin(T * 2 + i));
+      seg(x, y, x, y, I, I * 0.75, I * 0.45, 1.1 + r() * 1.5); }
+    const tex = SEG.render(sc);
+    const ribs = sm(77.6, 81.2, k), open = sm(79.2, 82.0, k), focus = sm(80.6, 82.0, k), peak = Math.exp(-Math.pow((k - 82) / 1.6, 2));
+    const rp = project(cam, [0, 10, -46]);
+    GL.frame({ name: "ch2_nave", fs: NAVE, scale: sc, textures: { uSeg: tex },
+      uniforms: { uTime: T, ...camUniforms(cam), uD: [ribs, open, focus, peak], uM: [Q(), 1, 0, 0] } },
+      { bloom: 0.8 + 0.4 * peak, thresh: 1.0, exposure: 1.0 + 0.35 * peak, rays: rp ? [rp[0] / W, 1 - rp[1] / H, 0.25 + 0.35 * open] : [0.5, 0.5, 0], letterbox: LB, vignette: 0.55, t: T, fade: 1 - sm(89.2, 90, k) });
+    o.save(); o.globalAlpha = alpha; blit(); o.restore();
+  }
 
   // ---------------------------------------------------------------- chapter
   chapter("ch2", 90, (k, T) => {
     if (k < 36) sceneDesk(k, T);
-    // captions
+    else if (k < 65) { sceneSky(k, T, 1); if (k > 63) sceneHall(k, T, sm(63, 65, k)); }
+    else if (k < 78) { sceneHall(k, T, 1); if (k > 76.5) sceneNave(k, T, sm(76.5, 78, k)); }
+    else sceneNave(k, T, 1);
     if (k < 6.2) chapterCard(k, "II", "불씨");
     caption(k, 7.0, 18.8, (a, u) => capT("1950 · 앨런 튜링", a, u));
     caption(k, 21.0, 33.2, (a, u) => capT("1956 · 다트머스", a, u));
     caption(k, 28.2, 33.6, (a, u) => capB("인공지능이라는 학문이 시작되다", a, u));
+    caption(k, 35.0, 45.2, (a, u) => capT("1958 · 퍼셉트론", a, u));
+    caption(k, 39.0, 45.4, (a, u) => capB("뇌세포를 흉내 낸 첫 학습 기계", a, u));
+    caption(k, 47.5, 53.0, (a, u) => capB("그리고 겨울이 왔다", a, u));
+    caption(k, 54.5, 61.5, (a, u) => capB("약속은 너무 컸고, 컴퓨터는 너무 느렸다", a, u));
+    caption(k, 65.0, 75.2, (a, u) => capT("1997 · 딥블루", a, u));
+    caption(k, 70.5, 75.6, (a, u) => capB("체스 세계 챔피언을 꺾다", a, u));
+    caption(k, 77.5, 88.8, (a, u) => capT("2012 · 딥러닝", a, u));
+    caption(k, 81.0, 88.6, (a, u) => capB("기계가 스스로 보는 법을 배우다", a, u));
   });
 })();
