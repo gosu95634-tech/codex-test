@@ -768,7 +768,24 @@ float ribs(vec3 p){
   float dgr=min(length(vec2(arch(vec2(s1*9./10.8,p.y),9.,6.),o1)),length(vec2(arch(vec2(s2*9./10.8,p.y),9.,6.),o2)))-.05;
   float ridge=length(vec2(p.x,p.y-13.75))-.05;
   return min(min(tr,dgr),ridge); }
-float piers(vec3 p){ vec3 q=p; q.z=mod(q.z,6.)-3.; q.x=abs(q.x)-4.5; return length(q.xz)-.42; }
+// clustered gothic piers: a core with four engaged shafts, a plinth and a capital at the springing
+float piers(vec3 p){ vec3 q=p; q.z=mod(q.z,6.)-3.; q.x=abs(q.x)-4.5;
+  float d=length(q.xz)-.34;
+  d=min(d,min(min(length(q.xz-vec2(.36,0.))-.13, length(q.xz+vec2(.36,0.))-.13), min(length(q.xz-vec2(0.,.36))-.13, length(q.xz+vec2(0.,.36))-.13)));
+  float base=max(max(abs(q.x),abs(q.z))-.64, q.y-.6);
+  float cap=max(length(q.xz)-.62, abs(q.y-6.05)-.16);
+  return min(min(d,base),cap); }
+float walls(vec3 p){ return 9.6-abs(p.x); }
+float mapS(vec3 p){ return min(min(piers(p), walls(p)), p.y); }
+vec3 nS(vec3 p){ const vec2 e=vec2(.004,-.004); return normalize(e.xyy*mapS(p+e.xyy)+e.yyx*mapS(p+e.yyx)+e.yxy*mapS(p+e.yxy)+e.xxx*mapS(p+e.xxx)); }
+// tall lancet windows in the side walls, stained glass that warms with the light
+vec3 lancet(vec3 p, float ign){
+  float zc=mod(p.z,6.)-3., bay=floor(p.z/6.); float w=1.05*sqrt(max(0.,1.-smoothstep(9.0,11.2,p.y)));
+  if(abs(zc)>w || p.y<2.3) return vec3(-1.);
+  float lead=step(.92,fract(p.y*1.4+hash12(vec2(bay,floor(p.y*1.4)))))+step(.9,fract((zc+1.05)*2.2));
+  float h=hash12(vec2(bay*3.1+floor((zc+1.05)*2.2), floor(p.y*1.4)));
+  vec3 g=h<.45? vec3(2.2,1.3,.45) : h<.7? vec3(1.9,.45,.2) : h<.85? vec3(.5,.7,1.5) : vec3(2.4,1.9,1.1);
+  return g*(1.-clamp(lead,0.,1.))*(.18+.9*ign); }
 vec3 rose(vec2 q, float open, float focus){
   float r=length(q)/4.2; float a=atan(q.y,q.x); if(r>1.08) return vec3(0);
   float bl=mix(.25,.012,focus);
@@ -787,14 +804,21 @@ void main(){
   vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
   float t=.1, glow=0.; bool hit=false; int NS=uM.x>.5?180:110; float m=0.;
   for(int i=0;i<180;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float dr=ribs(p), dp=piers(p), df=p.y, dw=ZE-p.z+0.;
-    float d=min(min(dr,dp),min(df, p.z-ZE)); glow+=exp(-dr*22.)*.0035*smoothstep(ZE,ZE+60.*uD.x,p.z+0.)*1.+exp(-dp*30.)*.0006;
-    if(d<.002*t){ hit=true; m= d==dr?1.: d==dp?2.: d==df?3.:4.; break; } t+=d*.85; if(t>80.) break; }
+    float dwl=walls(p);
+    float d=min(min(min(dr,dp),min(df, p.z-ZE)),dwl); glow+=exp(-dr*22.)*.0035*smoothstep(ZE,ZE+60.*uD.x,p.z+0.)*1.+exp(-dp*30.)*.0006;
+    if(d<.002*t){ hit=true; m= d==dr?1.: d==dp?2.: d==df?3.: d==dwl?5.:4.; break; } t+=d*.85; if(t>80.) break; }
   vec3 p=ro+rd*t; vec3 col=vec3(.004,.003,.003);
   float ign=uD.x;
   vec3 gC=vec3(1.,.66,.32);
   if(hit){
     if(m==1.) col=gC*2.5*ign;
-    else if(m==2.) col=vec3(.09,.07,.05)*(.3+ign)*(1.+.5*sin(p.y*.5));
+    else if(m==2. || m==5.){ vec3 rpw=vec3(0.,10.,ZE); vec3 n=nS(p); vec3 L=normalize(rpw-p);
+      float dif=max(dot(n,L),0.)*.75+.25*max(dot(n,L)*.5+.5,0.), fall=1./(1.+.0025*dot(rpw-p,rpw-p));
+      float ao=.3+.7*smoothstep(0.,5.,p.y);
+      vec3 stone=vec3(.42,.36,.29)*(.7+.3*fbm(p*vec3(2.2,.5,2.2)))*(.9+.1*sin(p.y*7.));
+      col=stone*(gC*dif*fall*(.25+3.2*uD.y)*ao + vec3(.03,.025,.02)*(.4+ign) + gC*.05*ign*ao);
+      col+=gC*pow(1.-max(dot(n,-rd),0.),3.)*.06*ign*ao;                       // a glow at the edges from the burning ribs
+      if(m==5.){ vec3 g=lancet(p,ign); if(g.x>=0.) col=g; } }
     else if(m==3.){ vec2 c=floor(p.xz*.5); col=vec3(.05,.04,.03)*(.6+.4*mod(c.x+c.y,2.))*(.4+ign);
       vec3 rr=reflect(rd,vec3(0,1,0)); vec2 rq=(p.xy+rr.xy*((ZE-p.z)/min(rr.z,-1e-3)))-vec2(0.,10.); col+=rose(rq,uD.y,uD.z)*.12; }
     else { vec2 q=p.xy-vec2(0.,10.); col=rose(q,uD.y,uD.z)+vec3(.04,.03,.02)*ign; }
@@ -819,8 +843,8 @@ void main(){
     const cam = naveCam(k), sc = SCALE();
     segReset();
     const r = rng(2012);
-    for (let i = 0; i < 160; i++) { const x = r() * 1920, y0 = r() * 1100, sp = 250 + r() * 450, y = (y0 + (k - 76) * sp) % 1150 - 40; const I = 0.9 * (1 - sm(79, 83, k)) + 0.1;
-      seg(x, y - sp / 28, x, y, I, I * 0.72, I * 0.42, 1.2); }
+    for (let i = 0; i < 70; i++) { const x = r() * 1920, y0 = r() * 1100, sp = 250 + r() * 450, y = (y0 + (k - 76) * sp) % 1150 - 40; const I = 0.35 * (1 - sm(78.5, 81, k));
+      seg(x, y - sp / 60, x, y, I, I * 0.72, I * 0.42, 1.0); }
     for (let i = 0; i < 260; i++) { const x = (r() * 1920 + Math.sin(k * 0.3 + i) * 30), y = (r() * 1080 - (k - 76) * (8 + r() * 14)); const I = 0.35 * sm(80, 83, k) * (0.6 + 0.4 * Math.sin(T * 2 + i));
       seg(x, y, x, y, I, I * 0.75, I * 0.45, 1.1 + r() * 1.5); }
     const tex = SEG.render(sc);

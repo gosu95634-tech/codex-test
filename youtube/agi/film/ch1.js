@@ -548,27 +548,92 @@ function stairFrame(k, T, cam, p) {
   blit();
 }
 function stairCam(k) {
-  // 34–43: low beside the first steps while the names appear; 43–54: the camera lifts its head up the endless flight
+  // 34–43: beside the flight while the five climb; 43–54: the camera lifts its head up the endless stairs
   const u = easeIO(clamp((k - 34) / 9.5));
-  let pos = lerp3([6.8, 1.5, -4.8], [6.3, 2.1, -3.2], u), at = lerp3([0, 2.7, 5.0], [0, 3.1, 5.8], u), fov = 1.18;
+  let pos = lerp3([9.8, 2.7, -7.4], [9.0, 3.5, -6.0], u), at = lerp3([0, 3.4, 6.2], [0, 4.1, 7.4], u), fov = 1.0;
   const v = easeIO(clamp((k - 43) / 10.5));
   if (v > 0) { pos = lerp3(pos, [3.6, 3.2, -0.5], v); at = lerp3(at, [0, 60 * ST.rise, 60 * ST.run], easeIO(clamp((k - 43.2) / 9.5))); fov = lerp(1.18, 1.1, v); }
   return CAM(pos, at, fov);
 }
-const STAIR_LABELS = [["개미", 1, 0.6, 35.2], ["닭", 3, 0.55, 36.8], ["침팬지", 6, 0.55, 38.4], ["보통 사람", 9, 0.25, 40.2], ["아인슈타인", 9, 0.9, 40.9]];
+// Five beings climb one staircase together, drawn as gold constellation figures from an old star atlas. Each meets its own
+// ceiling: it tries one more step, strikes an invisible limit (a line of light flashes) and stays there. Einstein gets one
+// step past the human. Local figure coords: x forward, y up, feet at 0.
+const FIG = {
+  ant: { H: .95, ell: [[-.52, .36, .36, .22], [0, .34, .17, .12], [.38, .42, .13, .11]],
+    lines: [[[-.05, .3], [-.3, .14], [-.48, 0]], [[0, .3], [.04, .12], [-.02, 0]], [[.06, .3], [.3, .14], [.46, 0]], [[.44, .5], [.62, .78], [.84, .84]], [[.4, .5], [.5, .82], [.66, .94]]],
+    stars: [[-.52, .36], [0, .34], [.38, .42], [.84, .84], [.66, .94]] },
+  hen: { H: 1.14, ell: [[0, .55, .38, .27], [.42, 1.0, .085, .085]],
+    lines: [[[.24, .72], [.34, .95]], [[.5, 1.01], [.62, .97], [.5, .94]], [[.36, 1.07], [.4, 1.14], [.44, 1.08], [.48, 1.13], [.51, 1.05]], [[-.34, .66], [-.55, .95], [-.5, .7], [-.62, .88], [-.42, .58]],
+      [[0, .3], [.04, .12], [-.04, 0]], [[.12, .3], [.16, .12], [.1, 0]], [[-.2, .56], [.05, .48], [.22, .6]]],
+    stars: [[.42, 1.0], [0, .55], [-.55, .95], [.04, .12], [.16, .12], [.62, .97]] },
+  chimp: { H: 1.08, ell: [[.36, .96, .13, .12]],
+    lines: [[[.27, .86], [0, .78], [-.3, .56]], [[.2, .8], [.34, .46], [.42, .04]], [[.12, .78], [.2, .44], [.26, .04]], [[-.3, .56], [-.22, .28], [-.32, 0]], [[-.26, .54], [-.06, .28], [-.12, 0]]],
+    stars: [[.36, .96], [.2, .8], [.34, .46], [-.3, .56], [-.22, .28], [-.06, .28], [.42, .04]] },
+  man: { H: 1.0, ell: [[0, .9, .075, .085]],
+    lines: [[[0, .82], [0, .46]], [[-.14, .75], [.14, .75]], [[.14, .75], [.2, .56], [.25, .4]], [[-.14, .75], [-.18, .56], [-.2, .4]], [[-.08, .46], [.08, .46]],
+      [[.08, .46], [.14, .23], [.2, 0]], [[-.08, .46], [-.06, .23], [-.12, 0]]],
+    stars: [[0, .9], [.14, .75], [-.14, .75], [.25, .4], [-.2, .4], [0, .46], [.14, .23], [-.06, .23], [.2, 0], [-.12, 0]] },
+};
+FIG.einstein = { ...FIG.man, lines: FIG.man.lines.concat([[[-.05, .95], [-.13, 1.03]], [[-.01, .98], [-.04, 1.08]], [[.04, .97], [.1, 1.05]], [[-.07, .9], [-.16, .93]], [[.06, .92], [.14, .97]], [[-.06, .86], [-.15, .83]]]) };
+const BEINGS = [
+  { name: "개미", kind: "ant", lim: 1, x: -1.25, h: 0.36, lx: -80, ly: -70 },
+  { name: "닭", kind: "hen", lim: 3, x: -0.62, h: 0.68, lx: -70, ly: -80 },
+  { name: "침팬지", kind: "chimp", lim: 6, x: 0.0, h: 1.15, lx: -60, ly: -90 },
+  { name: "보통 사람", kind: "man", lim: 10, x: 0.62, h: 1.55, lx: -120, ly: -110 },
+  { name: "아인슈타인", kind: "einstein", lim: 11, x: 1.25, h: 1.55, lx: 110, ly: -130 },
+];
+const HOP = 0.55, CLIMB0 = 35.0;
+function beingPose(b, i, k) {
+  const t = k - CLIMB0 - i * 0.07;
+  if (t <= 0) return { step: 0, hop: 0, flash: 0, swing: 0, stop: 0 };
+  const tl = b.lim * HOP;
+  if (t < tl) { const s2 = t / HOP, j = Math.floor(s2), u = s2 - j; return { step: j + ease(u), hop: Math.sin(Math.PI * u) * 0.3, flash: 0, swing: j % 2, stop: 0 }; }
+  const tb = t - tl - 0.12;                                          // one more try: up, against the ceiling, back down
+  const bump = tb > 0 && tb < 0.5 ? Math.sin(Math.PI * tb / 0.5) * 0.34 : 0;
+  const flash = tb > 0.22 ? Math.exp(-(tb - 0.22) * 1.6) : 0;
+  return { step: b.lim, hop: bump, flash, swing: b.lim % 2, stop: clamp(tb / 2.0) };
+}
+function drawFig(f, x0, y0, sc, dir, a, swing) {
+  o.save(); o.globalCompositeOperation = "lighter"; o.globalAlpha = a; o.translate(x0, y0);
+  const X = (x, y) => (swing && y < f.H * 0.3 ? -x : x) * dir * sc, Y = y => -y * sc;
+  o.strokeStyle = "rgba(255,224,168,0.95)"; o.lineWidth = Math.max(1.3, sc * 0.014); o.lineJoin = o.lineCap = "round";
+  o.shadowColor = "rgba(255,190,110,0.9)"; o.shadowBlur = Math.max(6, sc * 0.05);
+  for (const L of f.lines) { o.beginPath(); L.forEach(([x, y], n) => n ? o.lineTo(X(x, y), Y(y)) : o.moveTo(X(x, y), Y(y))); o.stroke(); }
+  for (const [cx, cy, rx, ry] of f.ell) { o.beginPath(); o.ellipse(cx * dir * sc, -cy * sc, rx * sc, ry * sc, 0, 0, 7); o.stroke(); }
+  o.shadowBlur = 0;
+  for (const [x, y] of f.stars) { const px = X(x, y), py = Y(y), r = Math.max(1.6, sc * 0.016);
+    const g = o.createRadialGradient(px, py, 0, px, py, r * 4); g.addColorStop(0, "rgba(255,250,236,1)"); g.addColorStop(0.3, "rgba(255,214,150,0.6)"); g.addColorStop(1, "rgba(255,180,90,0)");
+    o.fillStyle = g; o.beginPath(); o.arc(px, py, r * 4, 0, 7); o.fill(); }
+  o.restore();
+}
+function drawBeings(cam, k) {
+  const fade = 1 - smooth(45, 47.5, k), show = smooth(34.6, 35.3, k) * fade;
+  if (show <= 0) return;
+  BEINGS.forEach((b, i) => {
+    const ps = beingPose(b, i, k), fx = b.x / ST.wd;
+    const foot = [b.x, ps.step * ST.rise + 0.15 + ps.hop, ps.step * ST.run];
+    const P = project(cam, foot), P1 = project(cam, [foot[0], foot[1] + 1, foot[2]]), Pn = project(cam, [foot[0], foot[1], foot[2] + 1]);
+    if (!P || !P1 || !Pn) return;
+    const ppm = Math.hypot(P1[0] - P[0], P1[1] - P[1]), f = FIG[b.kind], sc = ppm * b.h / f.H, dir = Pn[0] >= P[0] ? 1 : -1;
+    const a = show * (1 - 0.35 * ps.stop);
+    // its ceiling: an invisible limit that flashes when struck, then stays as a faint line
+    if (ps.flash > 0 || ps.stop > 0) {
+      const yc = b.lim * ST.rise + 0.15 + b.h * 1.22, zc = b.lim * ST.run;
+      const A = project(cam, [b.x - 0.6, yc, zc]), B = project(cam, [b.x + 0.6, yc, zc]);
+      if (A && B) { o.save(); o.globalCompositeOperation = "lighter"; const la = show * (0.45 + 0.55 * ps.flash);
+        o.strokeStyle = `rgba(255,226,170,${la})`; o.lineWidth = 2.2 + 3 * ps.flash; o.shadowColor = "rgba(255,200,120,1)"; o.shadowBlur = 10 + 20 * ps.flash;
+        o.beginPath(); o.moveTo(A[0], A[1]); o.lineTo(B[0], B[1]); o.stroke(); o.restore(); }
+    }
+    drawFig(f, P[0], P[1], sc, dir, a, ps.swing);
+    const Ph = project(cam, [foot[0], foot[1] + b.h * 1.05, foot[2]]); if (!Ph) return;
+    label(b.name, Ph[0] + b.lx, Ph[1] + b.ly, Ph[0], Ph[1], show * smooth(CLIMB0 + 0.2 + i * 0.3, CLIMB0 + 1.0 + i * 0.3, k), 26);
+  });
+}
 function sceneStairs(k, T) {
   let cam = stairCam(k); if (DBG().scam) cam = CAM(...DBG().scam);
   const white = smooth(52.2, 54.2, k);
   stairFrame(k, T, cam, { sun: 1.0 + 0.6 * smooth(44, 51, k) + 5 * white * white, exposure: 1.0 + 0.8 * white, lift: smooth(53.2, 54.3, k), rays: 0.12 + 0.12 * smooth(44, 52, k), bloom: 0.45, ...(DBG().sp || {}) });
-  // names on the steps, stuck in 3D
-  const fade = 1 - smooth(45, 47.5, k);
-  pic(() => STAIR_LABELS.forEach(([s2, j, fx, t0], i) => {
-    const a = smooth(t0, t0 + 0.9, k) * fade; if (a <= 0) return;
-    const P = project(cam, stepTop(j, fx, -0.55)); if (!P) return;
-    const isE = i === 4, isH = i === 3;
-    const tx = P[0] + (isH ? -120 : isE ? 120 : 70), ty = P[1] - (isH ? 120 : isE ? 150 : 105);
-    label(s2, tx, ty, P[0], P[1], a, 30);
-  }));
+  pic(() => drawBeings(cam, k));
 }
 
 function sceneThree(k, T) {
@@ -625,7 +690,7 @@ chapter("ch1", 66, (k, T) => {
   caption(k, 42.8, 45.6, (a, u) => capB("ASI — 모든 분야에서", a, u));
   caption(k, 45.8, 48.9, (a, u) => capB("인류 최고의 천재보다 훨씬 뛰어난 지능", a, u));
   caption(k, 49.1, 51.8, (a, u) => capB("개미가 인간을 이해할 수 없듯이", a, u));
-  caption(k, 52.0, 55.2, (a, u) => capB("우리는 그것을 이해할 수 없을지도 모른다", a, u));
+  caption(k, 52.0, 54.5, (a, u) => capB("우리는 그것을 이해할 수 없을지도 모른다", a, u));
   caption(k, 55.6, 59.6, (a, u) => capB("좁은 AI  →  AGI  →  ASI", a, u));
   caption(k, 60.0, 64.8, (a, u) => capB("우리는 이미 두 번째 계단을 넘었다", a, u));
 });
