@@ -1,0 +1,472 @@
+<title>서버실 24시</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=IBM+Plex+Sans+KR:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one narrow ops console — status strip, full-day traffic chart, server rack, two big scale buttons. */
+:root {
+  --bg: #e9edf2;
+  --panel: #f8fafc;
+  --ink: #16202e;
+  --muted: #5b6779;
+  --line: #cdd4de;
+  --traffic: #2d5bd8;
+  --cap: #b8620f;
+  --bad: #c8322b;
+  --good: #1f8a5b;
+  --led-off: #d6dce4;
+  --f-display: "Chakra Petch", "IBM Plex Sans KR", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141b; --panel: #171e28; --ink: #e4e9f0; --muted: #8c98aa; --line: #2a3442;
+    --traffic: #7194ff; --cap: #f0a245; --bad: #ff6259; --good: #3fc28a; --led-off: #232c38;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141b; --panel: #171e28; --ink: #e4e9f0; --muted: #8c98aa; --line: #2a3442;
+  --traffic: #7194ff; --cap: #f0a245; --bad: #ff6259; --good: #3fc28a; --led-off: #232c38;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-inline: 16px; padding-block: 16px 28px;
+  word-break: keep-all; overflow-wrap: anywhere;
+  -webkit-tap-highlight-color: transparent;
+}
+.wrap { max-width: 600px; margin: 0 auto; display: grid; gap: 12px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+h1 { margin: 0; font-family: var(--f-display); font-size: 26px; letter-spacing: .02em; text-wrap: balance; }
+.clock { font-family: var(--f-display); font-size: 30px; font-variant-numeric: tabular-nums; line-height: 1; }
+.clock small { font-family: var(--f-body); font-size: 12px; color: var(--muted); margin-right: 6px; letter-spacing: .04em; }
+
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.stat { background: var(--panel); padding: 8px 10px; min-width: 0; }
+.stat .k { font-size: 11px; color: var(--muted); letter-spacing: .06em; }
+.stat .v { font-family: var(--f-mono); font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .s { font-family: var(--f-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bar { height: 5px; background: var(--led-off); border-radius: 3px; margin-top: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--good); width: 100%; transition: width .2s, background .2s; }
+@media (max-width: 440px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.ticker { min-height: 42px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; }
+.ticker .tag { font-family: var(--f-mono); font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--led-off); color: var(--muted); flex: none; }
+.ticker.warn { border-color: var(--cap); }
+.ticker.warn .tag { background: var(--cap); color: var(--panel); }
+.ticker.alert { border-color: var(--bad); }
+.ticker.alert .tag { background: var(--bad); color: var(--panel); }
+.ticker span:last-child { min-width: 0; }
+
+.chart { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 10px 4px; }
+.chart canvas { display: block; width: 100%; height: 190px; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); padding: 2px 4px 6px; }
+.legend b { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+
+.rack { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.rack-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.rack-head span:last-child { font-family: var(--f-mono); }
+.slots { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; }
+@media (max-width: 440px) { .slots { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.slot { height: 22px; border-radius: 4px; background: var(--led-off); position: relative; overflow: hidden; }
+.slot::after { content: ""; position: absolute; left: 0; bottom: 0; width: 100%; height: var(--load, 0%); background: color-mix(in srgb, var(--good) 35%, transparent); }
+.slot.on { background: color-mix(in srgb, var(--good) 22%, var(--led-off)); box-shadow: inset 0 0 0 1.5px var(--good); }
+.slot.on.hot { box-shadow: inset 0 0 0 1.5px var(--bad); }
+.slot.on.hot::after { background: color-mix(in srgb, var(--bad) 40%, transparent); }
+.slot.boot { box-shadow: inset 0 0 0 1.5px var(--cap); animation: blink .5s steps(2) infinite; }
+.slot.boot::after { height: var(--prog, 0%); background: color-mix(in srgb, var(--cap) 40%, transparent); }
+.slot.dead { background: var(--bad); animation: blink .25s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .45; } }
+
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.btn { font: 700 18px var(--f-body); padding: 16px 10px; border-radius: 12px; border: 1.5px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; touch-action: manipulation; user-select: none; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn .sub { font: 500 12px var(--f-mono); color: var(--muted); }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 3px solid var(--traffic); outline-offset: 2px; }
+.btn.add { border-color: var(--good); }
+.btn.add:active { background: color-mix(in srgb, var(--good) 14%, var(--panel)); }
+.btn.rem:active { background: color-mix(in srgb, var(--bad) 10%, var(--panel)); }
+.btn:disabled { opacity: .4; cursor: default; }
+.keys { font-size: 12px; color: var(--muted); text-align: center; }
+@media (hover: none) { .keys { display: none; } }
+
+.overlay { position: absolute; inset: 0; display: grid; place-items: center; padding: 12px; background: color-mix(in srgb, var(--panel) 72%, transparent); backdrop-filter: blur(2px); border-radius: 10px; }
+.card { max-width: 420px; width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; display: grid; gap: 10px; box-shadow: 0 8px 30px color-mix(in srgb, var(--ink) 14%, transparent); }
+.card h2 { margin: 0; font-family: var(--f-display); font-size: 22px; text-wrap: balance; }
+.card p { margin: 0; font-size: 14px; color: var(--muted); }
+.card ul { margin: 0; padding-left: 18px; font-size: 14px; display: grid; gap: 2px; }
+.card .go { font: 700 16px var(--f-body); padding: 12px; border-radius: 10px; border: none; background: var(--ink); color: var(--panel); cursor: pointer; }
+.card .go:focus-visible { outline: 3px solid var(--traffic); outline-offset: 2px; }
+.grade { font-family: var(--f-display); font-size: 54px; line-height: 1; }
+.result { display: flex; gap: 16px; align-items: center; }
+.result dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 2px 12px; font-size: 13px; }
+.result dt { color: var(--muted); }
+.result dd { margin: 0; font-family: var(--f-mono); font-weight: 700; font-variant-numeric: tabular-nums; }
+.stage { position: relative; display: grid; gap: 12px; }
+@media (prefers-reduced-motion: reduce) { .slot.boot, .slot.dead { animation: none; } .bar i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>서버실 24시</h1>
+    <div class="clock"><small>오늘</small><span id="clock">00:00</span></div>
+  </header>
+
+  <div class="stats">
+    <div class="stat"><div class="k">잔고</div><div class="v" id="money">$200</div><div class="s" id="flow">+$0.0/s</div></div>
+    <div class="stat"><div class="k">신뢰도</div><div class="v" id="rep">100%</div><div class="bar"><i id="repbar"></i></div></div>
+    <div class="stat"><div class="k">부하</div><div class="v" id="load">0%</div><div class="s" id="rps">0 / 0 rps</div></div>
+    <div class="stat"><div class="k">가동률</div><div class="v" id="uptime">100.00%</div><div class="s">목표 99.9%</div></div>
+  </div>
+
+  <div class="ticker" id="ticker"><span class="tag">LOG</span><span id="tickmsg">서비스 준비 완료. 서버 5대 대기 중.</span></div>
+
+  <div class="stage">
+    <div class="chart">
+      <div class="legend">
+        <span><b style="background: var(--traffic)"></b>트래픽</span>
+        <span><b style="background: var(--cap)"></b>서버 용량</span>
+        <span><b style="background: var(--muted); opacity: .5"></b>예보</span>
+        <span><b style="background: var(--bad)"></b>요청 실패</span>
+      </div>
+      <canvas id="cv" aria-label="하루 트래픽과 서버 용량 그래프"></canvas>
+    </div>
+
+    <div class="rack">
+      <div class="rack-head"><span>서버 랙 · 대당 100 rps · $0.5/s · 부팅 4초</span><span id="count">5 가동</span></div>
+      <div class="slots" id="slots"></div>
+    </div>
+
+    <div class="overlay" id="overlay">
+      <div class="card" id="card"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn rem" id="rem" type="button">서버 − <span class="sub">끄기</span></button>
+    <button class="btn add" id="add" type="button">서버 + <span class="sub">4초 부팅</span></button>
+  </div>
+  <div class="keys">키보드: ↑ 추가 · ↓ 제거 · Space 시작</div>
+</div>
+
+<script>
+(() => {
+  const DAY = 100;          // real seconds for 24 game hours
+  const BASE = 1000;        // rps at profile 1.0
+  const CAP = 100;          // rps per server
+  const REV = 0.01;         // $ per served request
+  const COST = 0.5;         // $ per server-second (booting servers bill too)
+  const BOOT = 4;           // seconds to boot
+  const MAX = 30;
+  const YMAX = 2600;
+  const START_MONEY = 200;
+  const PROFILE = [[0,.45],[2,.3],[5,.22],[7,.4],[9,.7],[12,1],[13,.95],[15,.72],[18,.85],[21,1.25],[23,.8],[24,.5]];
+
+  const $ = id => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  const slotsEl = $("slots");
+  const slotEls = [];
+  for (let i = 0; i < MAX; i++) { const d = document.createElement("div"); d.className = "slot"; slotsEl.appendChild(d); slotEls.push(d); }
+
+  function profile(h) {
+    for (let i = 0; i < PROFILE.length - 1; i++) {
+      const [a, x] = PROFILE[i], [b, y] = PROFILE[i + 1];
+      if (h <= b) { const u = (h - a) / (b - a), c = (1 - Math.cos(u * Math.PI)) / 2; return x + (y - x) * c; }
+    }
+    return PROFILE[PROFILE.length - 1][1];
+  }
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const hourAt = t => t / DAY * 24;
+  const fmtClock = t => { const m = Math.min(1439, Math.floor(hourAt(t) * 60)); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); };
+  const tAtHour = h => h / 24 * DAY;
+
+  function makeEvents() {
+    const ev = [{ type: "viral", t: tAtHour(rand(10, 19.5)), done: false, warned: false }];
+    if (Math.random() < 0.55) ev.push({ type: "viral", t: tAtHour(rand(1, 8)), done: false, warned: false });
+    ev.push({ type: "outage", t: tAtHour(rand(6, 20)), done: false, warned: false });
+    return ev.sort((a, b) => a.t - b.t);
+  }
+
+  function fresh() {
+    const slots = Array.from({ length: MAX }, (_, i) => ({ s: i < 5 ? "on" : "off", k: 0 }));
+    return { phase: "ready", end: null, t: 0, money: START_MONEY, rep: 100, slots, events: makeEvents(),
+      samples: [], sampleClock: 0, noise: 0, served: 0, demanded: 0, demand: 0, cap: 500, flow: 0,
+      peak: 5, msg: { text: "서비스 준비 완료. 서버 5대 대기 중.", kind: "", tag: "LOG" } };
+  }
+
+  let S = fresh();
+  let best = null;
+  try { best = JSON.parse(localStorage.getItem("sr24-best") || "null"); } catch (e) { best = null; }
+
+  const count = s => S.slots.filter(x => x.s === s).length;
+  function say(text, kind = "", tag = "LOG") { S.msg = { text: `${fmtClock(S.t)}  ${text}`, kind, tag }; }
+
+  function addServer() {
+    if (S.phase !== "run") return;
+    const slot = S.slots.find(x => x.s === "off");
+    if (!slot) { say("랙이 꽉 찼어요. 30대가 최대예요.", "warn", "FULL"); return; }
+    slot.s = "boot"; slot.k = BOOT;
+  }
+  function removeServer() {
+    if (S.phase !== "run") return;
+    const pick = [...S.slots].reverse().find(x => x.s === "boot") || [...S.slots].reverse().find(x => x.s === "on");
+    if (pick) { pick.s = "off"; pick.k = 0; }
+  }
+
+  function viralMul(t) {
+    let m = 1;
+    for (const e of S.events) {
+      if (e.type !== "viral") continue;
+      const d = t - e.t, len = 11;
+      if (d < 0 || d > len) continue;
+      const env = d < 1.5 ? d / 1.5 : d > len - 3 ? (len - d) / 3 : 1;
+      m += 1.1 * env;
+    }
+    return m;
+  }
+
+  function step(dt) {
+    S.t += dt;
+    for (const x of S.slots) {
+      if (x.s === "boot" && (x.k -= dt) <= 0) x.s = "on";
+      else if (x.s === "dead" && (x.k -= dt) <= 0) x.s = "off";
+    }
+    for (const e of S.events) {
+      if (!e.warned && S.t >= e.t - 3 && e.type === "viral") { e.warned = true; say("인플루언서가 링크를 올렸어요. 3초 뒤 트래픽이 두 배로 몰려와요.", "warn", "WARN"); }
+      if (!e.done && S.t >= e.t) {
+        e.done = true;
+        if (e.type === "viral") say("트래픽 폭증 중! 버티세요.", "alert", "SPIKE");
+        else {
+          const on = S.slots.filter(x => x.s === "on");
+          const n = Math.min(on.length, Math.max(1, Math.ceil(on.length * 0.3)));
+          on.sort(() => Math.random() - .5).slice(0, n).forEach(x => { x.s = "dead"; x.k = 2; });
+          say(`가용영역 장애로 서버 ${n}대가 꺼졌어요.`, "alert", "DOWN");
+        }
+      }
+    }
+    const on = count("on"), boot = count("boot");
+    S.peak = Math.max(S.peak, on + boot);
+    S.cap = on * CAP;
+    S.noise += (Math.random() - .5) * dt * 0.5; S.noise *= 0.985; S.noise = Math.max(-.08, Math.min(.08, S.noise));
+    S.demand = BASE * profile(hourAt(S.t)) * (1 + S.noise) * viralMul(S.t) * (0.4 + 0.6 * S.rep / 100);
+    const served = Math.min(S.demand, S.cap), drop = S.demand - served, frac = S.demand > 0 ? drop / S.demand : 0;
+    S.flow = served * REV - (on + boot) * COST;
+    S.money += S.flow * dt;
+    S.served += served * dt; S.demanded += S.demand * dt;
+    S.rep += frac > 0.001 ? -frac * 30 * dt : 0.5 * dt;
+    S.rep = Math.max(0, Math.min(100, S.rep));
+    if ((S.sampleClock += dt) >= 0.2) { S.sampleClock = 0; S.samples.push([S.t, S.demand, S.cap]); }
+
+    if (S.rep <= 0) finish("rep");
+    else if (S.money < 0) finish("broke");
+    else if (S.t >= DAY) finish("done");
+  }
+
+  function gradeOf(profit, up) {
+    if (profit >= 200 && up >= 99.5) return "S";
+    if (profit >= 140 && up >= 99) return "A";
+    if (profit >= 70 && up >= 97) return "B";
+    if (profit > 0) return "C";
+    return "D";
+  }
+
+  function finish(why) {
+    S.phase = "over"; S.end = why;
+    const up = S.demanded ? S.served / S.demanded * 100 : 100;
+    const profit = S.money - START_MONEY;
+    const g = why === "done" ? gradeOf(profit, up) : "F";
+    S.result = { g, profit, up, why };
+    if (why === "done" && (!best || profit > best.profit)) {
+      best = { profit: Math.round(profit), g };
+      try { localStorage.setItem("sr24-best", JSON.stringify(best)); } catch (e) {}
+    }
+    say(why === "done" ? "하루 운영 종료." : why === "rep" ? "사용자가 전부 떠났어요." : "카드 한도 초과. 파산.", why === "done" ? "" : "alert", "END");
+    renderCard();
+  }
+
+  function start() {
+    S = fresh(); S.phase = "run";
+    say("자정, 서비스 오픈. 새벽엔 조용하고 점심과 밤 9시에 붐벼요.");
+    $("overlay").hidden = true;
+    $("add").focus({ preventScroll: true });
+  }
+
+  function renderCard() {
+    const card = $("card");
+    const bestLine = best ? `<p>내 최고 기록: ${best.g}등급 · 순이익 $${best.profit}</p>` : "";
+    if (S.phase === "ready") {
+      card.innerHTML = `
+        <h2>오늘 하루 서버를 운영하세요</h2>
+        <ul>
+          <li>트래픽보다 서버가 적으면 요청이 실패하고 신뢰도가 떨어져요.</li>
+          <li>서버가 너무 많으면 놀고 있는 서버 비용으로 돈이 새요.</li>
+          <li>새 서버는 켜지는 데 4초 걸려요. 미리 켜 두세요.</li>
+          <li>바이럴 폭증과 데이터센터 장애가 예고 없이 와요.</li>
+        </ul>
+        <p>신뢰도 0% 또는 잔고 $0 미만이면 끝. 24시까지 버티고 돈을 남기세요.</p>
+        ${bestLine}
+        <button class="go" id="go" type="button">운영 시작</button>`;
+    } else {
+      const r = S.result;
+      const title = r.why === "done" ? "하루 운영 끝" : r.why === "rep" ? "서비스 폭망" : "파산";
+      const note = r.why === "done"
+        ? (r.g === "S" ? "실제 클라우드 엔지니어 수준이에요. 회사에서는 이걸 오토스케일링으로 자동화해요." : r.up < 99 ? "요청을 많이 놓쳤어요. 피크 전에 미리 서버를 켜 두세요." : "안정적이었지만 노는 서버가 많았어요. 새벽엔 과감하게 줄여 보세요.")
+        : r.why === "rep" ? "트래픽을 감당 못 해서 사용자가 떠났어요. 그래프에서 파란선이 주황선을 넘지 않게 하세요." : "서버를 너무 많이 켜서 돈이 바닥났어요.";
+      card.innerHTML = `
+        <h2>${title}</h2>
+        <div class="result">
+          <div class="grade" style="color: var(${r.g === "F" || r.g === "D" ? "--bad" : r.g === "S" || r.g === "A" ? "--good" : "--cap"})">${r.g}</div>
+          <dl>
+            <dt>순이익</dt><dd>${r.profit >= 0 ? "+" : "−"}$${Math.abs(r.profit).toFixed(0)}</dd>
+            <dt>가동률</dt><dd>${r.up.toFixed(2)}%</dd>
+            <dt>버틴 시간</dt><dd>${fmtClock(S.t)}</dd>
+            <dt>최대 서버</dt><dd>${S.peak}대</dd>
+          </dl>
+        </div>
+        <p>${note}</p>
+        ${bestLine}
+        <button class="go" id="go" type="button">다시 하기</button>`;
+    }
+    $("overlay").hidden = false;
+    $("go").addEventListener("click", start);
+  }
+
+  // ---- drawing
+  let W = 0, H = 0, colors = {};
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of ["traffic", "cap", "bad", "muted", "line", "ink", "panel"]) colors[k] = cs.getPropertyValue("--" + k).trim();
+  }
+  function resize() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const r = cv.getBoundingClientRect();
+    W = r.width; H = r.height;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    readColors();
+  }
+
+  function draw() {
+    const L = 34, R = 6, T = 6, B = 20;
+    const pw = W - L - R, ph = H - T - B;
+    const X = t => L + t / DAY * pw, Y = v => T + ph - Math.min(v, YMAX) / YMAX * ph;
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = "500 10px " + getComputedStyle(document.body).getPropertyValue("--f-mono");
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 1;
+    for (let v = 0; v <= 2500; v += 500) {
+      ctx.strokeStyle = colors.line; ctx.globalAlpha = v === 0 ? 1 : .6;
+      ctx.beginPath(); ctx.moveTo(L, Y(v) + .5); ctx.lineTo(L + pw, Y(v) + .5); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.fillStyle = colors.muted; ctx.textAlign = "right";
+      ctx.fillText(v === 0 ? "0" : (v / 1000) + "k", L - 6, Y(v));
+    }
+    ctx.textAlign = "center"; ctx.textBaseline = "top";
+    for (let h = 0; h <= 24; h += 6) ctx.fillText(h + "시", Math.min(L + pw - 10, Math.max(L + 8, X(tAtHour(h)))), T + ph + 5);
+
+    // forecast
+    ctx.setLineDash([3, 4]); ctx.strokeStyle = colors.muted; ctx.globalAlpha = .55; ctx.beginPath();
+    for (let i = 0; i <= 200; i++) { const t = DAY * i / 200, y = Y(BASE * profile(hourAt(t))); i ? ctx.lineTo(X(t), y) : ctx.moveTo(X(t), y); }
+    ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+    const sm = S.samples;
+    if (sm.length > 1) {
+      // overload
+      ctx.fillStyle = colors.bad; ctx.globalAlpha = .5;
+      for (let i = 1; i < sm.length; i++) {
+        const [t, d, c] = sm[i];
+        if (d > c) { const x0 = X(sm[i - 1][0]); ctx.fillRect(x0, Y(d), X(t) - x0 + .6, Y(c) - Y(d)); }
+      }
+      // traffic area
+      ctx.globalAlpha = .16; ctx.fillStyle = colors.traffic; ctx.beginPath(); ctx.moveTo(X(sm[0][0]), Y(0));
+      for (const [t, d] of sm) ctx.lineTo(X(t), Y(d));
+      ctx.lineTo(X(sm[sm.length - 1][0]), Y(0)); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+      ctx.strokeStyle = colors.traffic; ctx.lineWidth = 1.8; ctx.beginPath();
+      sm.forEach(([t, d], i) => i ? ctx.lineTo(X(t), Y(d)) : ctx.moveTo(X(t), Y(d))); ctx.stroke();
+      // capacity step
+      ctx.strokeStyle = colors.cap; ctx.lineWidth = 2; ctx.beginPath();
+      sm.forEach(([t, , c], i) => { if (!i) ctx.moveTo(X(t), Y(c)); else { ctx.lineTo(X(t), Y(sm[i - 1][2])); ctx.lineTo(X(t), Y(c)); } });
+      ctx.stroke();
+    }
+    // now cursor
+    if (S.phase !== "ready") {
+      const x = X(Math.min(S.t, DAY));
+      ctx.strokeStyle = colors.ink; ctx.globalAlpha = .35; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x + .5, T); ctx.lineTo(x + .5, T + ph); ctx.stroke(); ctx.globalAlpha = 1;
+      ctx.fillStyle = colors.traffic; ctx.beginPath(); ctx.arc(x, Y(S.demand), 3.5, 0, 7); ctx.fill();
+    }
+    ctx.lineWidth = 1;
+  }
+
+  function render() {
+    $("clock").textContent = fmtClock(S.t);
+    $("money").textContent = (S.money < 0 ? "−$" : "$") + Math.abs(S.money).toFixed(0);
+    $("money").style.color = S.money < 40 ? "var(--bad)" : "";
+    const f = S.phase === "run" ? S.flow : 0;
+    $("flow").textContent = (f >= 0 ? "+$" : "−$") + Math.abs(f).toFixed(1) + "/s";
+    $("flow").style.color = f < 0 ? "var(--bad)" : "var(--good)";
+    $("rep").textContent = Math.round(S.rep) + "%";
+    const rb = $("repbar"); rb.style.width = S.rep + "%";
+    rb.style.background = S.rep < 35 ? "var(--bad)" : S.rep < 70 ? "var(--cap)" : "var(--good)";
+    const load = S.cap ? S.demand / S.cap : (S.demand ? 9.99 : 0);
+    $("load").textContent = Math.round(load * 100) + "%";
+    $("load").style.color = load > 1 ? "var(--bad)" : load > .9 ? "var(--cap)" : "";
+    $("rps").textContent = `${Math.round(S.demand)} / ${S.cap} rps`;
+    const up = S.demanded ? S.served / S.demanded * 100 : 100;
+    $("uptime").textContent = up.toFixed(2) + "%";
+    $("uptime").style.color = up < 99 ? "var(--bad)" : up < 99.9 ? "var(--cap)" : "";
+    const on = count("on"), boot = count("boot");
+    $("count").textContent = `${on} 가동${boot ? ` · ${boot} 부팅` : ""}`;
+    const perLoad = Math.min(1, load) * 100;
+    S.slots.forEach((x, i) => {
+      const el = slotEls[i];
+      const cls = "slot" + (x.s !== "off" ? " " + x.s : "") + (x.s === "on" && load > 1 ? " hot" : "");
+      if (el.className !== cls) el.className = cls;
+      if (x.s === "on") el.style.setProperty("--load", perLoad + "%");
+      if (x.s === "boot") el.style.setProperty("--prog", (1 - x.k / BOOT) * 100 + "%");
+    });
+    const tk = $("ticker");
+    const tcls = "ticker" + (S.msg.kind ? " " + S.msg.kind : "");
+    if (tk.className !== tcls) tk.className = tcls;
+    tk.firstElementChild.textContent = S.msg.tag;
+    $("tickmsg").textContent = S.msg.text;
+    $("add").disabled = $("rem").disabled = S.phase !== "run";
+    draw();
+  }
+
+  let last = 0;
+  function frame(now) {
+    const dt = Math.min(0.1, last ? (now - last) / 1000 : 0);
+    last = now;
+    if (S.phase === "run" && !document.hidden) {
+      let left = dt;
+      while (left > 0 && S.phase === "run") { const d = Math.min(0.05, left); step(d); left -= d; }
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  $("add").addEventListener("click", addServer);
+  $("rem").addEventListener("click", removeServer);
+  window.addEventListener("keydown", e => {
+    if (e.key === "ArrowUp" || e.key === "+" || e.key === "=") { e.preventDefault(); addServer(); }
+    else if (e.key === "ArrowDown" || e.key === "-") { e.preventDefault(); removeServer(); }
+    else if (e.key === " " && S.phase !== "run") { e.preventDefault(); start(); }
+  });
+  window.addEventListener("resize", resize);
+  new MutationObserver(readColors).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", readColors);
+
+  function boot(data) {
+    if (data && data.S) S = data.S;
+    resize();
+    if (S.phase === "run") $("overlay").hidden = true; else renderCard();
+    requestAnimationFrame(frame);
+  }
+  window.claude?.hot?.snapshot?.(() => ({ S }));
+  window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
