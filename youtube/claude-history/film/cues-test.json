@@ -1,0 +1,27 @@
+{
+  "bpm": 150,
+  "beats": 26,
+  "events": [
+    { "b": 0,    "type": "heart", "s": 1 },
+    { "b": 0.35, "type": "heart", "s": 0.7 },
+    { "b": 2,    "type": "heart", "s": 1 },
+    { "b": 2.35, "type": "heart", "s": 0.7 },
+    { "b": 3,    "type": "riser", "len": 1 },
+    { "b": 4,    "type": "impact", "s": 1 },
+    { "b": 5,    "type": "impact", "s": 1 },
+    { "b": 6,    "type": "impact", "s": 1 },
+    { "b": 7,    "type": "impact", "s": 1.2 },
+    { "b": 8,    "type": "title", "s": 1 },
+    { "b": 8,    "type": "drone", "len": 4 },
+    { "b": 10,   "type": "stab", "s": 0.8, "root": 0 },
+    { "b": 10.5, "type": "stab", "s": 0.85, "root": 2 },
+    { "b": 11,   "type": "stab", "s": 0.9, "root": 3 },
+    { "b": 11.5, "type": "stab", "s": 1, "root": 5 },
+    { "b": 12,   "type": "slam", "s": 1.4 },
+    { "b": 12,   "type": "groove", "len": 8 },
+    { "b": 16,   "type": "impact", "s": 0.9 },
+    { "b": 18,   "type": "glint", "s": 1 },
+    { "b": 20,   "type": "roll", "len": 4 },
+    { "b": 24,   "type": "slam", "s": 1.6 }
+  ]
+}

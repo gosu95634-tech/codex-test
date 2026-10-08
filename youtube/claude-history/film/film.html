@@ -1,0 +1,307 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "Serif"; src: url(../assets/fonts/NotoSerifKR-Black.ttf); }
+@font-face { font-family: "Impact"; src: url(../assets/fonts/BlackHanSans.ttf); }
+@font-face { font-family: "Dela"; src: url(../assets/fonts/DelaGothicOne.ttf); }
+@font-face { font-family: "SansM"; src: url(../assets/fonts/NotoSansKR-Medium.ttf); }
+@font-face { font-family: "SansB"; src: url(../assets/fonts/NotoSansKR-Black.ttf); }
+@font-face { font-family: "Mono"; src: url(../assets/fonts/JetBrainsMono-Bold.ttf); }
+html, body { margin: 0; background: #000; }
+canvas { display: block; }
+</style></head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+// 「아모데이의 모험」 frame engine. renderFrame(t) is a pure function of t.
+const W = 1920, H = 1080;
+const INK = "#0b0b0d", PAPER = "#f2eee6", ORANGE = "#ff6a1f", EMBER = "#ffb070", DIM = "#8a847c";
+let CUES = { bpm: 150, events: [] }, SPB = 0.4;
+function setCues(c) {
+  SPB = 60 / c.bpm;
+  const ev = [...c.events];
+  for (const e of c.events) if (e.type === "groove" || e.type === "roll") for (let k = 0; k < e.len; k++) ev.push({ b: e.b + k, type: "beat", s: 0.6 });
+  CUES = { ...c, events: ev };
+}
+
+const main = document.getElementById("c"), m = main.getContext("2d");
+const mk = () => { const c = document.createElement("canvas"); c.width = W; c.height = H; return [c, c.getContext("2d")]; };
+const [buf, g] = mk(), [tmp, tg] = mk(), [post, pg] = mk();
+
+// ---------- utils
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
+const lerp = (a, b, u) => a + (b - a) * u;
+const easeOut = u => 1 - Math.pow(1 - clamp(u), 3);
+const easeIn = u => Math.pow(clamp(u), 3);
+const easeOutBack = u => { u = clamp(u); const c = 1.9; return 1 + (c + 1) * Math.pow(u - 1, 3) + c * Math.pow(u - 1, 2); };
+function env(t, types, k = 8) { let v = 0; for (const e of CUES.events) { if (!types.includes(e.type)) continue; const te = e.b * SPB; if (t >= te) v += (e.s || 1) * Math.exp(-(t - te) * k); } return v; }
+function since(t, types) { let best = Infinity, ev = null; for (const e of CUES.events) { if (!types.includes(e.type)) continue; const d = t - e.b * SPB; if (d >= 0 && d < best) { best = d; ev = e; } } return [best, ev]; }
+
+function txt(ctx, s, x, y, o = {}) {
+  const { font = "Serif", size = 200, sx = 1, align = "center", base = "middle", fill = PAPER, stroke = null, lw = 0, ls = 0, alpha = 1, rot = 0, join = "round" } = o;
+  ctx.save(); ctx.globalAlpha *= alpha; ctx.translate(x, y); if (rot) ctx.rotate(rot); ctx.scale(sx, 1);
+  ctx.font = `${size}px "${font}"`; ctx.textAlign = align; ctx.textBaseline = base; ctx.letterSpacing = ls + "px";
+  if (stroke) { ctx.lineJoin = join; ctx.miterLimit = 3; ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.strokeText(s, 0, 0); }
+  if (fill) { ctx.fillStyle = fill; ctx.fillText(s, 0, 0); }
+  ctx.restore();
+}
+// Fat mincho: stroke in the fill colour to push the weight past Black, Eva-card style.
+const card = (ctx, s, x, y, size, o = {}) => txt(ctx, s, x, y, { size, stroke: o.fill || PAPER, lw: size * 0.014, sx: 0.82, join: "miter", ...o });
+
+function focusLines(ctx, cx, cy, n, inner, seed, alpha = 0.9, color = PAPER) {
+  const r = rng(seed); ctx.save(); ctx.fillStyle = color; ctx.globalAlpha = alpha;
+  for (let i = 0; i < n; i++) {
+    const a = r() * Math.PI * 2, w = 0.004 + r() * 0.012, ri = inner * (0.85 + r() * 0.6), ro = 1600;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(a - w) * ro, cy + Math.sin(a - w) * ro);
+    ctx.lineTo(cx + Math.cos(a) * ri, cy + Math.sin(a) * ri * 0.62);
+    ctx.lineTo(cx + Math.cos(a + w) * ro, cy + Math.sin(a + w) * ro);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+function halftoneBurst(ctx, cx, cy, R, amt, rot, color = ORANGE) {
+  const sp = 34; ctx.save(); ctx.fillStyle = color;
+  const c = Math.cos(rot), s = Math.sin(rot);
+  for (let gy = -H; gy <= H * 2; gy += sp) for (let gx = -W * 0.2; gx <= W * 1.2; gx += sp) {
+    const x = cx + (gx - cx) * c - (gy - cy) * s, y = cy + (gx - cx) * s + (gy - cy) * c;
+    if (x < -20 || x > W + 20 || y < -20 || y > H + 20) continue;
+    const d = Math.hypot(x - cx, (y - cy) * 1.4), rr = (1 - d / R) * sp * 0.62 * amt;
+    if (rr > 0.6) { ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill(); }
+  }
+  ctx.restore();
+}
+// Halftone wipe: dots shrink to reveal what's underneath. p 0 = fully covered, 1 = clear.
+function halftoneWipe(ctx, p, ox, oy, color = INK) {
+  const sp = 48; ctx.save(); ctx.fillStyle = color;
+  for (let y = 0; y <= H + sp; y += sp) for (let x = (y / sp) % 2 ? sp / 2 : 0; x <= W + sp; x += sp) {
+    const d = Math.hypot(x - ox, y - oy) / 2200, rr = clamp((1 - p * 1.6 + d) * 1.2) * sp * 0.75;
+    if (rr > 0.5) { ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill(); }
+  }
+  ctx.restore();
+}
+function menace(ctx, x, y, size, t, born, seed) { // JoJo-style ゴ
+  const age = t - born; if (age < 0) return;
+  const r = rng(seed), pop = easeOutBack(age / 0.18), wob = Math.sin(t * 9 + r() * 6) * 0.06;
+  ctx.save(); ctx.translate(x, y); ctx.rotate(-0.12 + wob); ctx.scale(pop * (1 + 0.04 * Math.sin(t * 14 + seed)), pop);
+  txt(ctx, "ゴ", 0, 0, { font: "Dela", size, fill: null, stroke: ORANGE, lw: size * 0.16 });
+  txt(ctx, "ゴ", 0, 0, { font: "Dela", size, fill: PAPER, stroke: INK, lw: size * 0.07 });
+  ctx.restore();
+}
+function starFlare(ctx, x, y, s, alpha = 1) {
+  ctx.save(); ctx.globalCompositeOperation = "lighter"; ctx.globalAlpha = alpha;
+  const grd = ctx.createRadialGradient(x, y, 0, x, y, 90 * s); grd.addColorStop(0, "rgba(255,240,220,1)"); grd.addColorStop(0.25, "rgba(255,150,80,0.6)"); grd.addColorStop(1, "rgba(255,106,31,0)");
+  ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(x, y, 90 * s, 0, 7); ctx.fill();
+  ctx.fillStyle = "#fff8ee";
+  const spike = (len, wid, a) => { ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.beginPath(); ctx.moveTo(-len, 0); ctx.quadraticCurveTo(0, -wid, len, 0); ctx.quadraticCurveTo(0, wid, -len, 0); ctx.fill(); ctx.restore(); };
+  spike(520 * s, 7 * s, 0); spike(160 * s, 6 * s, Math.PI / 2); spike(90 * s, 4 * s, Math.PI / 4); spike(90 * s, 4 * s, -Math.PI / 4);
+  ctx.restore();
+}
+
+// ---------- characters
+// Amodei caricature, drawn in manga silhouette. Origin at feet, 560 units tall.
+function darioPath(t) {
+  const p = new Path2D(), fl = Math.sin(t * 7) * 9, fl2 = Math.sin(t * 7 + 1.3) * 18;
+  const blob = (x, y, rx, ry) => { p.moveTo(x + rx, y); p.ellipse(x, y, rx, ry, 0, 0, 7); };
+  // long trench coat: sloped shoulders, arms hanging inside the outline, knee-length flared hem
+  p.moveTo(-22, -446); p.bezierCurveTo(-70, -440, -104, -432, -112, -404);
+  p.lineTo(-126, -238); p.lineTo(-104, -232); p.lineTo(-100, -330);
+  p.lineTo(-132 - fl, -150); p.lineTo(-50, -146);
+  p.lineTo(-46, -8); p.lineTo(-70, 0); p.lineTo(-12, 0); p.lineTo(-14, -150); // left leg + shoe
+  p.lineTo(14, -150); p.lineTo(12, 0); p.lineTo(70, 0); p.lineTo(46, -8); p.lineTo(50, -146); // right leg + shoe
+  p.lineTo(132, -150); p.lineTo(214 + fl2 * 1.4, -196 + fl * 0.8); p.lineTo(104, -330); // coat tail catching the wind
+  p.lineTo(104, -232); p.lineTo(126, -238); p.lineTo(112, -404);
+  p.bezierCurveTo(104, -432, 70, -440, 22, -446); p.closePath();
+  p.rect(-17, -462, 34, 22); // neck
+  blob(0, -500, 38, 48); // head
+  blob(-38, -498, 8, 12); blob(38, -498, 8, 12); // ears
+  const r = rng(11); // curly hair: irregular curls so the outline stays bumpy, never a helmet
+  for (let a = Math.PI * 0.96; a <= Math.PI * 2.04; a += 0.27) { const rr = 13 + r() * 9, d = 42 + r() * 8; blob(Math.cos(a) * d, -514 + Math.sin(a) * (d * 0.92), rr, rr * (0.85 + r() * 0.3)); }
+  for (let a = Math.PI * 1.18; a <= Math.PI * 1.82; a += 0.32) { const rr = 12 + r() * 7; blob(Math.cos(a) * 24, -534 + Math.sin(a) * 26, rr, rr); }
+  return p;
+}
+function drawDario(ctx, cx, footY, h, t, o = {}) {
+  const s = h / 560; ctx.save(); ctx.translate(cx, footY); ctx.scale(s, s);
+  const p = darioPath(t);
+  ctx.save(); ctx.shadowColor = ORANGE; ctx.shadowBlur = 40; ctx.strokeStyle = EMBER; ctx.lineWidth = 7; ctx.stroke(p); ctx.restore();
+  ctx.fillStyle = INK; ctx.fill(p);
+  // glasses catch the rim light even in silhouette
+  ctx.strokeStyle = o.lens || "rgba(255,190,140,0.55)"; ctx.lineWidth = 3.2;
+  ctx.beginPath(); ctx.arc(-16, -500, 12, 0, 7); ctx.moveTo(28, -500); ctx.arc(16, -500, 12, 0, 7); ctx.moveTo(-4, -502); ctx.lineTo(4, -502); ctx.stroke();
+  ctx.restore();
+  return { lensL: [cx - 16 * s, footY - 500 * s], lensR: [cx + 16 * s, footY - 500 * s], s };
+}
+
+// ---------- scenes (beat ranges)
+function sceneDisclaimer(t, b) {
+  g.fillStyle = INK; g.fillRect(0, 0, W, H);
+  const hb = env(t, ["heart"], 7);
+  const grd = g.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, 900);
+  grd.addColorStop(0, `rgba(255,106,31,${0.16 * hb})`); grd.addColorStop(1, "rgba(255,106,31,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  const a = clamp(b / 0.6) * (b < 3.6 ? 1 : clamp((4 - b) / 0.4));
+  txt(g, "※ 이 영상은 패러디입니다", W / 2, H / 2 - 26, { font: "SansM", size: 50, alpha: a, ls: 4 });
+  txt(g, "실제 인물·회사와 무관한 팬 메이드 영상 · 내용은 공개된 사실 기반", W / 2, H / 2 + 40, { font: "SansM", size: 30, fill: DIM, alpha: a, ls: 2 });
+  if (b >= 3) { // ignition line
+    const u = easeIn((b - 3) / 1), w = W * u;
+    g.save(); g.shadowColor = ORANGE; g.shadowBlur = 30; g.fillStyle = ORANGE; g.fillRect(W / 2 - w / 2, H / 2 + 96, w, 3 + 5 * u); g.restore();
+  }
+  // glitch slices
+  const r = rng(Math.floor(t * 30)); if (r() < 0.22) for (let i = 0; i < 3; i++) { const y = r() * H, h = 4 + r() * 24, dx = (r() - 0.5) * 60; g.drawImage(buf, 0, y, W, h, dx, y, W, h); }
+}
+
+function sceneCards(t, b) {
+  const i = Math.floor(b) - 4, u = b - Math.floor(b), z = lerp(1.07, 1.0, easeOut(u));
+  g.fillStyle = INK; g.fillRect(0, 0, W, H);
+  g.save(); g.translate(W / 2, H / 2); g.scale(z, z); g.translate(-W / 2, -H / 2);
+  if (i === 0) {
+    card(g, "제1화", 130, H / 2 + 20, 560, { align: "left" });
+    txt(g, "EPISODE : 01", W - 140, H - 150, { font: "Mono", size: 34, align: "right", ls: 10, fill: DIM });
+  } else if (i === 1) {
+    card(g, "아모데이", W / 2, H / 2 + 10, 500, { sx: 0.74 });
+  } else if (i === 2) {
+    card(g, "의", W * 0.64, H * 0.6, 1250, { sx: 0.9 });
+  } else {
+    card(g, "모", W / 2, H * 0.285, 420, { sx: 0.95 });
+    card(g, "험", W / 2, H * 0.725, 420, { sx: 0.95 });
+  }
+  g.restore();
+}
+
+function sceneTitle(t, b) {
+  const u = b - 8, z = 1 + 0.035 * u;
+  g.fillStyle = INK; g.fillRect(0, 0, W, H);
+  g.save(); g.translate(W / 2, H / 2); g.scale(z, z); g.translate(-W / 2, -H / 2);
+  txt(g, "제1화", 150, 214, { size: 108, align: "left", sx: 0.84, stroke: PAPER, lw: 3 });
+  txt(g, "EPISODE : 01", W - 150, 214, { font: "Mono", size: 30, align: "right", ls: 10, fill: DIM });
+  const lw = (W - 300) * easeOut(u / 0.6);
+  g.fillStyle = PAPER; g.globalAlpha = 0.7; g.fillRect(150, 292, lw, 3); g.globalAlpha = 1;
+  card(g, "아모데이의", 140, 530, 300, { align: "left" });
+  card(g, "모험", 140, 838, 300, { align: "left" });
+  // blinking orange cursor after the title: the series' recurring "AI is typing" motif
+  g.font = '300px "Serif"'; const cw = g.measureText("모험").width * 0.82;
+  if (Math.floor(u * 2.5) % 2 === 0) { g.save(); g.shadowColor = ORANGE; g.shadowBlur = 30; g.fillStyle = ORANGE; g.fillRect(140 + cw + 36, 838 - 118, 54, 226); g.restore(); }
+  txt(g, "THE  ADVENTURE  OF  AMODEI", W - 150, 960, { size: 40, align: "right", ls: 6, sx: 1, fill: PAPER, alpha: easeOut((u - 0.3) / 0.6) });
+  g.restore();
+}
+
+function sceneStutter(t, b) {
+  const idx = Math.min(3, Math.floor((b - 10) * 2)), u = (b - 10) * 2 - idx;
+  const words = ["세상을", "바꾸러", "가", "다"], sizes = [400, 400, 820, 820];
+  const inv = idx % 2 === 1, bg = inv ? PAPER : INK, fg = idx === 3 ? ORANGE : inv ? INK : PAPER;
+  g.fillStyle = bg; g.fillRect(0, 0, W, H);
+  const z = lerp(1.12, 1, easeOut(u * 1.5));
+  g.save(); g.translate(W / 2, H / 2); g.scale(z, z);
+  card(g, words[idx], idx === 2 ? -120 : idx === 3 ? 150 : 0, 20, sizes[idx], { fill: fg });
+  g.restore();
+}
+
+function sceneSlam(t, b) {
+  const u = b - 12;
+  g.fillStyle = INK; g.fillRect(0, 0, W, H);
+  const beatPulse = env(t, ["slam", "beat"], 6);
+  halftoneBurst(g, W / 2, H / 2, 1250, 0.75 + 0.35 * beatPulse, u * 0.05);
+  focusLines(g, W / 2, H / 2, 140, 430, 100 + Math.floor(t * 20), 0.85);
+  const vig = g.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 1000); vig.addColorStop(0, "rgba(11,11,13,0.9)"); vig.addColorStop(0.55, "rgba(11,11,13,0.25)"); vig.addColorStop(1, "rgba(11,11,13,0)");
+  g.fillStyle = vig; g.fillRect(0, 0, W, H);
+  const pop = easeOutBack(u / 0.25), z = (0.6 + 0.4 * pop) * (1 + 0.04 * env(t, ["beat"], 9));
+  g.save(); g.translate(W / 2, H / 2); g.scale(z, z);
+  txt(g, "세상을 바꾸러 가다", 0, 10, { size: 232, sx: 0.84, fill: null, stroke: INK, lw: 56, join: "miter" });
+  card(g, "세상을 바꾸러 가다", 0, 10, 232);
+  g.fillStyle = ORANGE; g.fillRect(-760 * easeOut(u / 0.5), 160, 1520 * easeOut(u / 0.5), 16);
+  g.restore();
+  const spots = [[250, 230, 190], [1680, 210, 170], [210, 860, 170], [1700, 850, 200], [560, 120, 120], [1360, 960, 130]];
+  spots.forEach(([x, y, s], k) => menace(g, x, y, s, t, (13 + k * 0.5) * SPB, k + 1));
+}
+
+function sceneDoor(t, b) {
+  const u = b - 16;
+  const push = u < 4 ? lerp(1, 1.12, u / 4) : lerp(1.12, 2.6, easeIn((u - 4) / 4.2));
+  g.fillStyle = INK; g.fillRect(0, 0, W, H);
+  const cx = W / 2, foot = 930, hd = 560;
+  const focusY = foot - 500 * (hd / 560);
+  g.save(); g.translate(cx, focusY); g.scale(push, push); g.translate(-cx, -focusY);
+  txt(g, "2021", cx, 470, { size: 560, sx: 0.86, fill: null, stroke: "rgba(242,238,230,0.16)", lw: 3 });
+  // god rays
+  g.save(); g.globalCompositeOperation = "lighter"; const r = rng(42);
+  for (let i = 0; i < 46; i++) { const a = -Math.PI / 2 + (r() - 0.5) * 2.6 + Math.sin(t * 0.6 + i) * 0.02, w = 0.01 + r() * 0.04, L = 1500;
+    g.fillStyle = `rgba(255,${150 + r() * 80 | 0},90,${0.035 + r() * 0.04})`;
+    g.beginPath(); g.moveTo(cx, 560); g.lineTo(cx + Math.cos(a - w) * L, 560 + Math.sin(a - w) * L); g.lineTo(cx + Math.cos(a + w) * L, 560 + Math.sin(a + w) * L); g.fill(); }
+  g.restore();
+  // door of light
+  const dw = 300, dh = 700, dx = cx - dw / 2, dy = foot - dh;
+  g.save(); g.shadowColor = ORANGE; g.shadowBlur = 120;
+  const dg = g.createLinearGradient(dx, 0, dx + dw, 0); dg.addColorStop(0, "#ffb37a"); dg.addColorStop(0.5, "#fff6ea"); dg.addColorStop(1, "#ffb37a");
+  g.fillStyle = dg; g.fillRect(dx, dy, dw, dh); g.restore();
+  const fg = g.createLinearGradient(0, foot, 0, H); fg.addColorStop(0, "rgba(255,170,110,0.55)"); fg.addColorStop(1, "rgba(255,106,31,0)");
+  g.fillStyle = fg; g.beginPath(); g.moveTo(dx, foot); g.lineTo(dx + dw, foot); g.lineTo(dx + dw + 520, H); g.lineTo(dx - 520, H); g.fill();
+  const d = drawDario(g, cx, foot, hd, t);
+  g.restore();
+  // glasses glint (screen space)
+  const [gs] = since(t, ["glint"]);
+  if (gs < 1.2) {
+    const lx = cx + (d.lensL[0] - cx) * push, ly = focusY + (d.lensL[1] - focusY) * push;
+    starFlare(g, lx, ly, (0.4 + 1.4 * easeOut(gs / 0.12)) * (1 - easeIn(gs / 1.2)) * Math.min(1.6, push));
+  }
+  if (u >= 4) focusLines(g, W / 2, focusY, 60 + (u - 4) * 40, lerp(700, 260, (u - 4) / 4), 300 + Math.floor(t * 30), 0.25 + 0.15 * (u - 4));
+  [[300, 300, 150], [1640, 330, 140], [280, 820, 130], [1660, 800, 160]].forEach(([x, y, s], k) => menace(g, x, y, s * (1 + 0.1 * env(t, ["beat"], 8)), t, (16.5 + k * 0.5) * SPB, 20 + k));
+  if (u < 0.6) halftoneWipe(g, u / 0.6, cx, focusY);
+}
+
+function sceneEnd(t, b) {
+  g.fillStyle = INK; g.fillRect(0, 0, W, H);
+  const u = b - 24, w = W * (1 - easeOut(u / 0.5));
+  if (w > 1) { g.save(); g.shadowColor = ORANGE; g.shadowBlur = 40; g.fillStyle = ORANGE; g.fillRect(W / 2 - w / 2, H / 2 - 3, w, 6); g.restore(); }
+}
+
+// ---------- post
+const grain = [0, 1, 2, 3].map(k => { const c = document.createElement("canvas"); c.width = c.height = 256; const x = c.getContext("2d"), d = x.createImageData(256, 256), r = rng(900 + k);
+  for (let i = 0; i < d.data.length; i += 4) { const v = r() * 255; d.data[i] = d.data[i + 1] = d.data[i + 2] = v; d.data[i + 3] = 255; } x.putImageData(d, 0, 0); return c; });
+
+function renderFrame(t) {
+  const b = t / SPB;
+  if (b < 4) sceneDisclaimer(t, b);
+  else if (b < 8) sceneCards(t, b);
+  else if (b < 10) sceneTitle(t, b);
+  else if (b < 12) sceneStutter(t, b);
+  else if (b < 16) sceneSlam(t, b);
+  else if (b < 24) sceneDoor(t, b);
+  else sceneEnd(t, b);
+
+  // camera: shake + punch from hits
+  const hitE = env(t, ["impact", "slam", "stab", "title"], 9), r = rng(Math.floor(t * 60) * 7 + 3);
+  const sh = 18 * hitE, zx = 1 + 0.035 * hitE;
+  const ox = (r() - 0.5) * 2 * sh, oy = (r() - 0.5) * 2 * sh;
+  // chromatic aberration
+  const ca = 14 * env(t, ["slam", "impact", "stab"], 7) + (b >= 20 && b < 24 ? (b - 20) * 2.5 : 0);
+  pg.setTransform(1, 0, 0, 1, 0, 0); pg.globalCompositeOperation = "source-over"; pg.fillStyle = "#000"; pg.fillRect(0, 0, W, H);
+  const place = (ctx, src, dx) => { ctx.save(); ctx.translate(W / 2 + ox + dx, H / 2 + oy); ctx.scale(zx, zx); ctx.drawImage(src, -W / 2, -H / 2); ctx.restore(); };
+  if (ca > 0.8) {
+    for (const [col, dx] of [["#ff0000", -ca], ["#00ff00", 0], ["#0000ff", ca]]) {
+      tg.globalCompositeOperation = "source-over"; tg.drawImage(buf, 0, 0);
+      tg.globalCompositeOperation = "multiply"; tg.fillStyle = col; tg.fillRect(0, 0, W, H);
+      pg.globalCompositeOperation = "lighter"; place(pg, tmp, dx);
+    }
+    pg.globalCompositeOperation = "source-over";
+  } else place(pg, buf, 0);
+
+  // flashes: white pop on hits, inversion on slams, strobe in the roll
+  const [ds, de] = since(t, ["impact", "stab", "title", "slam"]);
+  if (ds < 2.5 / 60) { pg.fillStyle = PAPER; pg.globalAlpha = de && de.type === "slam" ? 1 : 0.85; pg.fillRect(0, 0, W, H); pg.globalAlpha = 1; }
+  else if (de && de.type === "slam" && ds < 6 / 60) { pg.globalCompositeOperation = "difference"; pg.fillStyle = "#fff"; pg.fillRect(0, 0, W, H); pg.globalCompositeOperation = "source-over"; }
+  // strobe on the beat only during the roll: 2.5 flashes/s stays under the 3/s photosensitivity limit
+  if (b >= 20 && b < 22 && b % 1 < 0.1) { pg.globalCompositeOperation = "difference"; pg.fillStyle = "#fff"; pg.fillRect(0, 0, W, H); pg.globalCompositeOperation = "source-over"; }
+
+  // grain + vignette
+  pg.save(); pg.globalCompositeOperation = "overlay"; pg.globalAlpha = 0.09; const gc = grain[Math.floor(t * 60) % 4];
+  pg.translate(-(r() * 256 | 0), -(r() * 256 | 0)); pg.fillStyle = pg.createPattern(gc, "repeat"); pg.fillRect(0, 0, W + 256, H + 256); pg.restore();
+  const vg = pg.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.05); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.55)");
+  pg.fillStyle = vg; pg.fillRect(0, 0, W, H);
+  m.drawImage(post, 0, 0);
+}
+
+window.setCues = setCues; window.renderFrame = renderFrame;
+window.ready = async () => { await Promise.all(["Serif", "Impact", "Dela", "SansM", "SansB", "Mono"].map(f => document.fonts.load(`40px "${f}"`, "가A゙ゴ"))); return [...document.fonts].filter(f => f.status === "loaded").length; };
+</script>
+</body></html>
