@@ -7,7 +7,7 @@ const camUniforms = c => ({ uCamPos: c.pos, uCamFwd: c.fwd, uCamUp: c.up, uFov: 
 
 // Caption with breath: fades and sharpens in, tracking tightens, then dissolves.
 function caption(t, t0, t1, draw) {
-  if (t < t0 - 0.01 || t > t1) return;
+  if (window.CLEAN || t < t0 - 0.01 || t > t1) return;
   const a = smooth(t0, t0 + 0.9, t) * (1 - smooth(t1 - 0.9, t1, t));
   const u = clamp((t - t0) / (t1 - t0));
   draw(a, u);
@@ -74,7 +74,7 @@ function worldFrame(t, cam, o2) {
   GL.frame({ name: "world", fs: SHADERS.world, scale: fin ? 1.5 : 0.55,
     uniforms: { uTime: t, ...camUniforms(cam), uA: [o2.open, o2.ringOpen, o2.core, 0.6], uB: [o2.ground, o2.gaze, t * 0.01, Math.min(1, 14000 / D)], uC: [...E, ES],
       uD: [CLOUD[0], CLOUD[1], fin ? 1 : 0, o2.crowd ?? 1], uRing: heavensRings(RING_PHASE + t * 0.04), uSock: o2.sock } },
-    { bloom: o2.bloom ?? 0.5, thresh: 1.3, exposure: o2.exposure ?? 1.0, rays: [rx, ry, q ? (o2.rays ?? 0.3) : 0], letterbox: LB, vignette: 0.6, lift: o2.lift ?? 0, fade: o2.fade ?? 1, t });
+    { bloom: o2.bloom ?? 0.5, thresh: 1.3, exposure: o2.exposure ?? 1.0, rays: [rx, ry, q ? (o2.rays ?? 0.3) : 0], letterbox: window.CLEAN ? 0 : LB, vignette: 0.6, lift: o2.lift ?? 0, fade: o2.fade ?? 1, t });
   blit();
 }
 function coldOpen(t) {

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2), opt = (k, d) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : d; };
-const chunks = Number(opt("--chunks", 2)), from = Number(opt("--from", 0));
+const chunks = Number(opt("--chunks", 3)), from = Number(opt("--from", 0));
 const log = m => console.log(`\x1b[33m▸\x1b[0m ${m}`);
 const run = (cmd, o = {}) => execSync(cmd, { stdio: "inherit", cwd: here, ...o });
 
@@ -43,10 +43,9 @@ for (const [name, url] of Object.entries(FONTS)) { const dest = path.join(fontDi
 // 3. render in parallel chunks on the GPU
 const out = path.join(here, "out"); fs.mkdirSync(out, { recursive: true });
 let to = opt("--to", "auto");
-if (to === "auto") {
-  const src = fs.readFileSync(path.join(here, "film", "timeline.js"), "utf8");
-  const m = [...src.matchAll(/\[(\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?),\s*\w+\]/g)].pop();
-  to = m ? Number(m[2]) : 40;
+if (to === "auto") { // ask the film itself how long it is
+  const info = execSync(`"${process.execPath}" "${path.join(here, "film", "render.js")}" x --duration --gpu`, { cwd: here, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+  to = JSON.parse(info.trim().split("\n").pop()).duration;
 }
 to = Number(to);
 const fps = 24, f0 = Math.round(from * fps), f1 = Math.round(to * fps), per = Math.ceil((f1 - f0) / chunks);
