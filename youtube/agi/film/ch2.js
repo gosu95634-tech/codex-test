@@ -680,10 +680,15 @@ float crack(vec2 p, vec2 ip, float tt){
   for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 o=id+vec2(i,j); o+=vec2(hash12(o),hash12(o+5.)); float dd=length(g-o); if(dd<md){ md2=md; md=dd; } else if(dd<md2) md2=dd; }
   float vor=smoothstep(.05,0.,md2-md)*smoothstep(R*.8,0.,r);
   return max(rad,vor*.8)*smoothstep(R+.3,R-.3,r); }
-vec3 sky(vec3 rd){ return vec3(.02,.022,.028)+vec3(.12,.13,.15)*pow(max(rd.y,0.),2.)*.3; }
+vec3 sky(vec3 rd){ return vec3(.02,.024,.034)+vec3(.12,.13,.15)*pow(max(rd.y,0.),2.)*.2; }
+float shadowH(vec3 ro, vec3 L){ float tW=(ro.x+10.2)/max(-L.x,1e-3);   // the window wall itself does not shadow: its light comes through it
+  float res=1., t=.05; for(int i=0;i<32;i++){ if(t>tW) break; float h=mH(ro+L*t); res=min(res,8.*h/t); t+=clamp(h,.05,1.2); if(res<.01||t>24.) break; } return clamp(res,0.,1.); }
+// moonlight reaches a point only through the tall windows of the left wall
+float winLight(vec3 p, vec3 L){ vec3 w=p+L*((-10.4-p.x)/L.x); vec2 ww=vec2(mod(w.z+3.,6.)-3.,w.y-6.);
+  return smoothstep(1.2,1.0,abs(ww.x))*smoothstep(3.1,2.85,abs(ww.y))*step(.15,abs(fract(ww.y*.75)-.5)*2.); }
 void main(){
   vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
-  vec3 L=normalize(vec3(-.55,.75,.35)); vec3 LC=vec3(.85,.9,1.)*1.4;
+  vec3 L=normalize(vec3(-.85,.45,.25)); vec3 LC=vec3(.8,.88,1.)*2.6;
   vec3 ip=KP+vec3(3.7,0.,0.);
   float t=.05; float m=0.; bool hit=false; int NS=uD.w>.5?160:100;
   float tF= rd.y<0.? -ro.y/rd.y : 1e9;
@@ -691,11 +696,12 @@ void main(){
   vec3 col=sky(rd); float tt=hit? t : tF;
   if(tt<60.){ vec3 p=ro+rd*tt; vec3 n; vec3 alb; float gl=40.;
     if(!hit || t>=tF){ n=vec3(0,1,0); vec2 c=floor(p.xz); float chk=mod(c.x+c.y,2.);
-      alb=mix(vec3(.62,.62,.64),vec3(.06,.065,.075),chk)*(.85+.15*fbm(vec3(p.xz*2.,1.)));
+      alb=mix(vec3(.34,.35,.38),vec3(.035,.04,.05),chk)*(.85+.15*fbm(vec3(p.xz*2.,1.)));
       float fr=smoothstep(.4,.7,fbm(vec3(p.xz*1.5,3.)))*(1.-uM.x); alb=mix(alb,vec3(.8,.83,.88),fr*.6); gl=mix(300.,30.,fr);
       float ck=crack(p.xz,ip.xz,uD.y);
       alb=mix(alb,vec3(1.),ck*.7);
-      col=alb*(max(dot(n,L),0.)*LC*.35+.05);
+      float lit=winLight(p,L)*shadowH(p+vec3(0.,.02,0.),L);
+      col=alb*(max(dot(n,L),0.)*LC*.55*lit+.012);
       vec3 rr=reflect(rd,n); col+=sky(rr)*.4+vec3(.9,.95,1.)*pow(max(dot(rr,L),0.),gl)*.8;
       col+=vec3(1.,.62,.28)*ck*(.6+3.5*uD.z)*(.7+.3*noise(vec3(p.xz*8.,uTime)));
       col+=vec3(1.,.6,.25)*uD.z*.4*exp(-length(p.xz-ip.xz)*.25);
@@ -703,18 +709,23 @@ void main(){
       if(m==1.){ alb=vec3(.86,.85,.83)*(.85+.15*smoothstep(.45,.5,abs(fbm(p*3.)-.5)+.45)); gl=60.; }
       else if(m==2.){ alb=vec3(.42,.43,.46)*(.8+.2*fbm(p*4.)); gl=20.; }
       else { alb=vec3(.1,.1,.11); gl=10.; }
-      float dif=max(dot(n,L),0.); float sss=m==1.? .25*max(dot(n,-L)*.5+.5,0.) : 0.;
-      col=alb*(dif*LC*.9+sss*vec3(.6,.65,.75)+vec3(.05,.055,.07)*(.5+.5*n.y));
+      float lit=winLight(p,L)*shadowH(p+n*.02,L);
+      float dif=max(dot(n,L),0.)*lit; float sss=m==1.? .25*max(dot(n,-L)*.5+.5,0.) : 0.;
+      col=alb*(dif*LC*.9+sss*vec3(.3,.34,.42)+vec3(.012,.014,.02)*(.5+.5*n.y));
+      col+=alb*vec3(.05,.06,.09)*pow(1.-max(dot(n,-rd),0.),2.);              // cold rim from the mist
+      if(m==1.) col+=alb*vec3(.16,.18,.24)*(.6+.4*max(dot(n,L),0.));          // the marble king holds the moonlight
       col+=vec3(.9,.95,1.)*pow(max(dot(reflect(rd,n),L),0.),gl)*.5;
       col+=alb*vec3(1.,.6,.25)*uD.z*1.2*exp(-length(p-ip)*.35)*max(-n.y*.0+.5,0.);
-      if(m==3.){ vec2 w=vec2(mod(p.z+3.,6.)-3.,p.y-6.); float win=step(abs(w.x),1.2)*step(abs(w.y),3.)*step(0.,p.x*sign(-L.x)); col+=vec3(.75,.8,.9)*win*1.6; }
+      if(m==3.){ vec2 w=vec2(mod(p.z+3.,6.)-3.,p.y-6.); float win=smoothstep(1.2,1.1,abs(w.x))*smoothstep(3.,2.9,abs(w.y))*step(p.x,0.);
+        float lead=max(step(.94,fract(w.y*.75+.5)), step(.92,fract((w.x+1.2)*1.25)));
+        col=mix(col, vec3(.55,.64,.85)*(1.2+.6*smoothstep(-3.,3.,w.y))*(1.-lead*.85), win); }
     }
-    float fog=1.-exp(-tt*.05); col=mix(col,vec3(.07,.075,.085),fog);
-  }
+    float fog=1.-exp(-tt*.05); col=mix(col,vec3(.05,.06,.08),fog);
+  } else col=vec3(.05,.06,.08);                                       // the far end dissolves into moonlit mist
   // shafts from the windows
   float sh=0.; for(int i=0;i<24;i++){ float s=(float(i)+hash12(gl_FragCoord.xy))/24.*min(tt,30.); vec3 p=ro+rd*s; float k=(10.4-p.x*sign(-L.x)*-1.)/max(abs(L.x),.1);
     vec3 w=p+L*((-10.4-p.x)/L.x); vec2 ww=vec2(mod(w.z+3.,6.)-3.,w.y-6.); sh+=step(abs(ww.x),1.1)*step(abs(ww.y),3.)*step(0.,w.y); }
-  col+=vec3(.6,.65,.75)*sh/24.*min(tt,30.)*.012;
+  col+=vec3(.55,.62,.8)*sh/24.*min(tt,30.)*.015;
   col+=texture(uSeg,gl_FragCoord.xy/uRes).rgb;
   fragColor=vec4(col*uM.y,1.); }`;
   SHADERS.ch2_hall = HALL;
@@ -817,14 +828,18 @@ void main(){
       float ao=.3+.7*smoothstep(0.,5.,p.y);
       vec3 stone=vec3(.42,.36,.29)*(.7+.3*fbm(p*vec3(2.2,.5,2.2)))*(.9+.1*sin(p.y*7.));
       col=stone*(gC*dif*fall*(.25+3.2*uD.y)*ao + vec3(.03,.025,.02)*(.4+ign) + gC*.05*ign*ao);
+      float moon=max(dot(n,normalize(vec3(-sign(p.x),.35,.2))),0.)*.6+.4;
+      col+=stone*vec3(.07,.09,.16)*moon*(1.-ign)*(.4+.6*ao);                 // before the light: cold moonlight from the windows
       col+=gC*pow(1.-max(dot(n,-rd),0.),3.)*.06*ign*ao;                       // a glow at the edges from the burning ribs
       if(m==5.){ vec3 g=lancet(p,ign); if(g.x>=0.) col=g; } }
     else if(m==3.){ vec2 c=floor(p.xz*.5); col=vec3(.05,.04,.03)*(.6+.4*mod(c.x+c.y,2.))*(.4+ign);
-      vec3 rr=reflect(rd,vec3(0,1,0)); vec2 rq=(p.xy+rr.xy*((ZE-p.z)/min(rr.z,-1e-3)))-vec2(0.,10.); col+=rose(rq,uD.y,uD.z)*.12; }
+      vec3 rr=reflect(rd,vec3(0,1,0)); vec2 rq=(p.xy+rr.xy*((ZE-p.z)/min(rr.z,-1e-3)))-vec2(0.,10.); col+=rose(rq,uD.y,uD.z)*.12;
+      col+=vec3(.015,.02,.04)*(1.-ign)*(.6+.4*mod(c.x+c.y,2.)); }
     else { vec2 q=p.xy-vec2(0.,10.); col=rose(q,uD.y,uD.z)+vec3(.04,.03,.02)*ign; }
     col*=exp(-t*.012);
   }
   col+=gC*glow*ign*2.;
+  col+=vec3(.025,.035,.06)*(1.-exp(-t*.025))*(1.-ign);                     // cold mist hanging in the nave
   vec3 rp=vec3(0.,10.,ZE); float tl=dot(rp-ro,rd); float dl=length(ro+rd*tl-rp);
   col+=vec3(1.,.72,.4)*uD.y*(.5/(dl*dl*.08+1.))*.35;
   float sh=0.; for(int i=0;i<20;i++){ float s=(float(i)+hash12(gl_FragCoord.xy+uTime))/20.*min(t,60.); vec3 q=ro+rd*s; vec3 dir=normalize(rp-q);
