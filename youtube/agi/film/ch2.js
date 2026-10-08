@@ -656,8 +656,8 @@ void main(){
 
   // ---------------------------------------------------------------- E: the frozen hall, the marble king (impact 70.0)
   const HALL = COMMON + `
-uniform vec4 uD; // king angle, time since impact, warm leak, quality
-uniform vec4 uM; // melt, exposure, -, -
+uniform vec4 uD; // king angle, time since impact, warm light from above, quality
+uniform vec4 uM; // melt, exposure, chapter time, -
 uniform sampler2D uSeg;
 float sdB2(vec2 p, vec2 b){ vec2 d=abs(p)-b; return length(max(d,0.))+min(max(d.x,d.y),0.); }
 float sdBox(vec3 p, vec3 b){ vec3 q=abs(p)-b; return length(max(q,0.))+min(max(q.x,max(q.y,q.z)),0.); }
@@ -677,71 +677,99 @@ float king(vec3 p){
   return d; }
 const vec3 KP=vec3(0.,0.,0.);
 float mapK(vec3 p){ vec3 piv=KP+vec3(.6,0.,0.); vec3 q=p-piv; q.xy=rot(-uD.x)*q.xy; q+=piv-KP; return king(q); }
+// the hall: a polished marble chessboard, stone columns, a coffered ceiling of heavy slabs.
+// when the king falls the ceiling gives way slab by slab, spreading out from above him, and light pours in.
+const float HC=14.;
+const vec2 CS=vec2(3.5,3.);
+const vec3 L=vec3(-.85537,.45284,.25158), LC=vec3(.8,.88,1.)*2.6;   // moon, through the left windows
+const vec3 LW=vec3(.2062,.9372,-.2812);                              // from above, once the roof is gone
+float slabT0(vec2 id){ if(hash12(id+19.7)<.35) return 999.;   // some slabs hold
+  return 70.3+length((id+.5)*CS-vec2(2.,0.))*.085+hash12(id+11.3)*.9; }
+float slab(vec3 p, out float bd){
+  vec2 id=floor(p.xz/CS), lc=p.xz-(id+.5)*CS;
+  bd=min(CS.x*.5-abs(lc.x),CS.y*.5-abs(lc.y));
+  if(abs((id.x+.5)*CS.x)>10.6) return 1e3;
+  const float FT=1.632;                                              // free fall from the ceiling to the floor
+  float tf=clamp(uM.z-slabT0(id),0.,FT), u=tf/FT;
+  vec3 q=vec3(lc.x,p.y-(HC-.35-4.9*tf*tf),lc.y);
+  q.yz=rot((hash12(id+3.1)-.5)*.9*u)*q.yz; q.xy=rot((hash12(id+7.7)-.5)*.7*u)*q.xy;   // they land tilted, dug into the board
+  return sdBox(q,vec3(1.62,.35,1.25))-.03; }
 float mapH(vec3 p, out float m){
   float d=mapK(p); m=1.;
   vec3 c=p; c.z=mod(c.z+3.,6.)-3.; c.x=abs(c.x)-7.;
-  float col=length(c.xz)-.55+.02*cos(atan(c.z,c.x)*16.); col=min(col,sdBox(c-vec3(0.,.2,0.),vec3(.8,.2,.8)));
+  float col=max(length(c.xz)-.55+.02*cos(atan(c.z,c.x)*16.),c.y-HC);
+  col=min(col,sdBox(c-vec3(0.,.2,0.),vec3(.8,.2,.8)));
+  col=min(col,sdBox(c-vec3(0.,HC-1.,0.),vec3(.82,.3,.82)));
   if(col<d){ d=col; m=2.; }
-  float wall=10.5-abs(p.x); if(wall<d){ d=wall; m=3.; }
+  float wall=max(10.5-abs(p.x),p.y-HC-1.); if(wall<d){ d=wall; m=3.; }
+  if(p.y<HC+.5){ float bd, sl=slab(p,bd); sl=min(sl,max(bd,0.)+.1);   // never step past a neighbouring cell's slab
+    if(sl<d){ d=sl; m=4.; } }
   return d; }
 float mH(vec3 p){ float m; return mapH(p,m); }
 vec3 nH(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=.002; return normalize(k.xyy*mH(p+k.xyy*h)+k.yyx*mH(p+k.yyx*h)+k.yxy*mH(p+k.yxy*h)+k.xxx*mH(p+k.xxx*h)); }
-float crack(vec2 p, vec2 ip, float tt){
-  if(tt<=0.) return 0.;
-  vec2 d=p-ip; float r=length(d); float R=min(tt*14.,9.)*(1.-.0*r);
-  if(r>R+.3) return 0.;
-  float a=atan(d.y,d.x); float rad=0.;
-  for(int i=0;i<9;i++){ float fi=float(i); float aa=fi*.7+sin(fi*3.1)*.3+r*.08*sin(fi+r*1.3); float da=abs(mod(a-aa+3.14159,6.28318)-3.14159)*r; rad=max(rad,smoothstep(.035,0.,da)); }
-  vec2 g=p*1.3; vec2 id=floor(g); float md=9., md2=9.;
-  for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ vec2 o=id+vec2(i,j); o+=vec2(hash12(o),hash12(o+5.)); float dd=length(g-o); if(dd<md){ md2=md; md=dd; } else if(dd<md2) md2=dd; }
-  float vor=smoothstep(.05,0.,md2-md)*smoothstep(R*.8,0.,r);
-  return max(rad,vor*.8)*smoothstep(R+.3,R-.3,r); }
-vec3 sky(vec3 rd){ return vec3(.02,.024,.034)+vec3(.12,.13,.15)*pow(max(rd.y,0.),2.)*.2; }
+vec3 WC(){ return mix(vec3(.5,.58,.8)*1.2,vec3(1.,.64,.34)*2.,uD.z); }
+vec3 sky(vec3 rd){ float u=max(rd.y,0.);
+  return vec3(.02,.024,.034)+vec3(.12,.13,.15)*u*u*.2+mix(vec3(.12,.14,.2),vec3(1.,.62,.32)*1.6,uD.z)*pow(u,1.5)*smoothstep(70.,72.,uM.z); }
+// light from above reaches a point once the slab over it (along LW) has fallen
+float roofOpen(vec3 p){ if(p.y>HC) return 1.; vec2 q=p.xz+LW.xz*(HC-p.y)/LW.y; if(abs(q.x)>10.5) return 0.;
+  return smoothstep(0.,.45,uM.z-slabT0(floor(q/CS))); }
 float shadowH(vec3 ro, vec3 L){ float tW=(ro.x+10.2)/max(-L.x,1e-3);   // the window wall itself does not shadow: its light comes through it
   float res=1., t=.05; for(int i=0;i<32;i++){ if(t>tW) break; float h=mH(ro+L*t); res=min(res,8.*h/t); t+=clamp(h,.05,1.2); if(res<.01||t>24.) break; } return clamp(res,0.,1.); }
 // moonlight reaches a point only through the tall windows of the left wall
 float winLight(vec3 p, vec3 L){ vec3 w=p+L*((-10.4-p.x)/L.x); vec2 ww=vec2(mod(w.z+3.,6.)-3.,w.y-6.);
   return smoothstep(1.2,1.0,abs(ww.x))*smoothstep(3.1,2.85,abs(ww.y))*step(.15,abs(fract(ww.y*.75)-.5)*2.); }
+vec3 shadeObj(vec3 p, vec3 n, float m, vec3 rd, float sh){
+  vec3 alb; float gl;
+  if(m==1.){ alb=vec3(.86,.85,.83)*(.85+.15*smoothstep(.45,.5,abs(fbm(p*3.)-.5)+.45)); gl=60.; }
+  else if(m==2.){ alb=vec3(.42,.43,.46)*(.8+.2*fbm(p*4.)); gl=20.; }
+  else if(m==4.){ alb=vec3(.34,.35,.38)*(.75+.25*fbm(p*2.5)); gl=14.; }
+  else { alb=vec3(.1,.1,.11); gl=10.; }
+  float lit=winLight(p,L)*sh;
+  float dif=max(dot(n,L),0.)*lit; float sss=m==1.? .25*max(dot(n,-L)*.5+.5,0.) : 0.;
+  vec3 col=alb*(dif*LC*.9+sss*vec3(.3,.34,.42)+vec3(.012,.014,.02)*(.5+.5*n.y)+WC()*roofOpen(p)*max(dot(n,LW),0.)*.8);
+  col+=alb*vec3(.05,.06,.09)*pow(1.-max(dot(n,-rd),0.),2.);              // cold rim from the mist
+  if(m==1.) col+=alb*vec3(.16,.18,.24)*(.6+.4*max(dot(n,L),0.));          // the marble king holds the moonlight
+  col+=vec3(.9,.95,1.)*pow(max(dot(reflect(rd,n),L),0.),gl)*.5;
+  if(m==3.){ vec2 w=vec2(mod(p.z+3.,6.)-3.,p.y-6.); float win=smoothstep(1.2,1.1,abs(w.x))*smoothstep(3.,2.9,abs(w.y))*step(p.x,0.);
+    float lead=max(step(.94,fract(w.y*.75+.5)), step(.92,fract((w.x+1.2)*1.25)));
+    col=mix(col, vec3(.55,.64,.85)*(1.2+.6*smoothstep(-3.,3.,w.y))*(1.-lead*.85), win); }
+  return col; }
 void main(){
   vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
-  vec3 L=normalize(vec3(-.85,.45,.25)); vec3 LC=vec3(.8,.88,1.)*2.6;
-  vec3 ip=KP+vec3(3.7,0.,0.);
   float t=.05; float m=0.; bool hit=false; int NS=uD.w>.5?160:100;
   float tF= rd.y<0.? -ro.y/rd.y : 1e9;
-  for(int i=0;i<160;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=mapH(p,m); if(d<.001*t){ hit=true; break; } t+=d*.9; if(t>min(tF,60.)) break; }
-  vec3 col=sky(rd); float tt=hit? t : tF;
-  if(tt<60.){ vec3 p=ro+rd*tt; vec3 n; vec3 alb; float gl=40.;
-    if(!hit || t>=tF){ n=vec3(0,1,0); vec2 c=floor(p.xz); float chk=mod(c.x+c.y,2.);
-      alb=mix(vec3(.34,.35,.38),vec3(.035,.04,.05),chk)*(.85+.15*fbm(vec3(p.xz*2.,1.)));
-      float fr=smoothstep(.4,.7,fbm(vec3(p.xz*1.5,3.)))*(1.-uM.x); alb=mix(alb,vec3(.8,.83,.88),fr*.6); gl=mix(300.,30.,fr);
-      float ck=crack(p.xz,ip.xz,uD.y);
-      alb=mix(alb,vec3(1.),ck*.7);
+  for(int i=0;i<160;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=mapH(p,m); if(d<.0008*t){ hit=true; break; } t+=d*.9; if(t>min(tF,60.)) break; }
+  vec3 col; float tt=hit? t : tF;
+  if(tt<60.){ vec3 p=ro+rd*tt;
+    if(!hit){
+      // polished marble chessboard: 2 m squares, the king stands on the centre of one
+      vec3 n=vec3(0,1,0);
+      vec2 g=(p.xz+1.)*.5, sq=floor(g); float blk=mod(sq.x+sq.y,2.);
+      vec2 e=abs(fract(g)-.5); float seam=smoothstep(.488,.5,max(e.x,e.y));
+      float vein=smoothstep(.46,.5,abs(fbm(vec3(p.xz*.9,blk*5.))-.5)+.46);
+      vec3 alb=mix(vec3(.6,.58,.54)*(.88+.12*vein),vec3(.016,.018,.022)*(1.+1.5*vein),blk)*(1.-.6*seam);
+      float fr=smoothstep(.5,.8,fbm(vec3(p.xz*1.5,3.)))*(1.-uM.x)*.5; alb=mix(alb,vec3(.8,.83,.88),fr*.6);
       float lit=winLight(p,L)*shadowH(p+vec3(0.,.02,0.),L);
-      col=alb*(max(dot(n,L),0.)*LC*.55*lit+.012);
-      vec3 rr=reflect(rd,n); col+=sky(rr)*.4+vec3(.9,.95,1.)*pow(max(dot(rr,L),0.),gl)*.8;
-      col+=vec3(1.,.62,.28)*ck*(.6+3.5*uD.z)*(.7+.3*noise(vec3(p.xz*8.,uTime)));
-      col+=vec3(1.,.6,.25)*uD.z*.4*exp(-length(p.xz-ip.xz)*.25);
-    } else { n=nH(p);
-      if(m==1.){ alb=vec3(.86,.85,.83)*(.85+.15*smoothstep(.45,.5,abs(fbm(p*3.)-.5)+.45)); gl=60.; }
-      else if(m==2.){ alb=vec3(.42,.43,.46)*(.8+.2*fbm(p*4.)); gl=20.; }
-      else { alb=vec3(.1,.1,.11); gl=10.; }
-      float lit=winLight(p,L)*shadowH(p+n*.02,L);
-      float dif=max(dot(n,L),0.)*lit; float sss=m==1.? .25*max(dot(n,-L)*.5+.5,0.) : 0.;
-      col=alb*(dif*LC*.9+sss*vec3(.3,.34,.42)+vec3(.012,.014,.02)*(.5+.5*n.y));
-      col+=alb*vec3(.05,.06,.09)*pow(1.-max(dot(n,-rd),0.),2.);              // cold rim from the mist
-      if(m==1.) col+=alb*vec3(.16,.18,.24)*(.6+.4*max(dot(n,L),0.));          // the marble king holds the moonlight
-      col+=vec3(.9,.95,1.)*pow(max(dot(reflect(rd,n),L),0.),gl)*.5;
-      col+=alb*vec3(1.,.6,.25)*uD.z*1.2*exp(-length(p-ip)*.35)*max(-n.y*.0+.5,0.);
-      if(m==3.){ vec2 w=vec2(mod(p.z+3.,6.)-3.,p.y-6.); float win=smoothstep(1.2,1.1,abs(w.x))*smoothstep(3.,2.9,abs(w.y))*step(p.x,0.);
-        float lead=max(step(.94,fract(w.y*.75+.5)), step(.92,fract((w.x+1.2)*1.25)));
-        col=mix(col, vec3(.55,.64,.85)*(1.2+.6*smoothstep(-3.,3.,w.y))*(1.-lead*.85), win); }
-    }
+      col=alb*(L.y*LC*.55*lit+vec3(.04,.046,.06)+WC()*roofOpen(p)*LW.y*.7);
+      // the board is a mirror: the king, the columns and the falling ceiling stand in it
+      vec3 rr=reflect(rd,n); float F=.04+.96*pow(1.-max(-rd.y,0.),5.);
+      vec3 rc=sky(rr); float rt=.02, rm;
+      for(int j=0;j<56;j++){ vec3 q=p+rr*rt; float d=mapH(q,rm); if(d<.002*rt){ rc=shadeObj(q,nH(q),rm,rr,1.); rc=mix(rc,vec3(.05,.06,.08),1.-exp(-rt*.05)); break; } rt+=d*.9; if(rt>40.){ rc=q.y>HC? sky(rr) : vec3(.05,.06,.08); break; } }
+      col+=rc*F*(1.-fr)*(1.-.7*seam)*mix(.7,1.,blk);
+      col+=vec3(.9,.95,1.)*pow(max(dot(rr,L),0.),mix(300.,30.,fr))*.8*lit;
+    } else { vec3 n=nH(p); col=shadeObj(p,n,m,rd,shadowH(p+n*.02,L)); }
     float fog=1.-exp(-tt*.05); col=mix(col,vec3(.05,.06,.08),fog);
-  } else col=vec3(.05,.06,.08);                                       // the far end dissolves into moonlit mist
-  // shafts from the windows
-  float sh=0.; for(int i=0;i<24;i++){ float s=(float(i)+hash12(gl_FragCoord.xy))/24.*min(tt,30.); vec3 p=ro+rd*s; float k=(10.4-p.x*sign(-L.x)*-1.)/max(abs(L.x),.1);
-    vec3 w=p+L*((-10.4-p.x)/L.x); vec2 ww=vec2(mod(w.z+3.,6.)-3.,w.y-6.); sh+=step(abs(ww.x),1.1)*step(abs(ww.y),3.)*step(0.,w.y); }
-  col+=vec3(.55,.62,.8)*sh/24.*min(tt,30.)*.015;
+  } else { vec3 pe=ro+rd*min(t,60.); col= pe.y>HC? sky(rd) : vec3(.05,.06,.08); }   // through the broken roof, or the moonlit mist at the far end
+  // shafts from the windows and, after the fall, through the roof; dust thrown up by the slabs
+  float dustA=smoothstep(70.,71.8,uM.z)*(1.-.6*uM.x);
+  vec3 acc=vec3(0.); float od=0., ds=min(tt,30.)/24.;
+  for(int i=0;i<24;i++){ float s=(float(i)+hash12(gl_FragCoord.xy))*ds; vec3 p=ro+rd*s;
+    vec3 w=p+L*((-10.4-p.x)/L.x); vec2 ww=vec2(mod(w.z+3.,6.)-3.,w.y-6.);
+    float mw=step(abs(ww.x),1.1)*step(abs(ww.y),3.)*step(0.,w.y);
+    float dd=dustA>0.? dustA*.04*smoothstep(.35,.75,fbm(vec3(p.x*.3,p.y*.45-uM.z*.3,p.z*.3)))*exp(-max(p.y,0.)*.12) : 0.;
+    acc+=(mw*vec3(.55,.62,.8)+roofOpen(p)*WC()*.3+vec3(.02,.022,.028))*(.015+dd)*ds*exp(-od);
+    od+=dd*ds; }
+  col=col*exp(-od)+acc;
   col+=texture(uSeg,gl_FragCoord.xy/uRes).rgb;
   fragColor=vec4(col*uM.y,1.); }`;
   SHADERS.ch2_hall = HALL;
@@ -755,23 +783,34 @@ void main(){
   }
   function hallCam(k) {
     const u = easeIO(clamp((k - 63) / 13));
-    const pos = mix3([-2.6, 1.5, 9.5], [-1.2, 2.6, 7.2], u);
-    return camAt(pos, mix3([0.6, 1.6, 0], [2.4, 0.4, 0], easeIO(clamp((k - 70.5) / 5.5))), 1.25);
+    let pos = mix3([-2.6, 1.5, 9.5], [-1.2, 2.6, 7.2], u);
+    // after the impact the camera looks up as the ceiling gives way, then follows the slabs down to the board
+    const up = easeIO(clamp((k - 70.4) / 1.6)) * (1 - easeIO(clamp((k - 72.6) / 2.8)));
+    const at = mix3(mix3([0.6, 1.6, 0], [2.4, 0.4, 0], easeIO(clamp((k - 70.5) / 5.5))), [1.5, 9, -6], up);
+    const sh = (k > 70 ? 0.05 * Math.exp(-(k - 70) * 3) : 0) + 0.014 * sm(71.8, 72.3, k) * (1 - sm(73.5, 75.5, k));
+    pos = add3(pos, [sh * Math.sin(k * 53), sh * Math.sin(k * 61 + 1), 0]);
+    return camAt(pos, at, lerp(1.25, 1.05, up));
   }
   function sceneHall(k, T, alpha) {
     const cam = hallCam(k), sc = SCALE();
     segReset();
     snow(k, 300, 0.35 * (1 - sm(75, 77, k)), 31, 63);
+    // marble chips from the king's impact
     if (k > 70) { const ip = project(cam, [3.7, 0.05, 0]); if (ip) { const r = rng(70); for (let i = 0; i < 220; i++) { const a = r() * 6.28, v = 60 + r() * 380, tt = k - 70, up = 120 + r() * 260;
       const x = ip[0] + Math.cos(a) * v * (1 - Math.exp(-tt * 2.5)) / 2.5 * 2, y = ip[1] - up * (1 - Math.exp(-tt * 2)) / 2 * 2 + 60 * tt * tt;
       const I = Math.exp(-tt * 1.4) * 1.2; seg(x, y, x + 3, y + 2, I, I, I * 1.05, 1.1); } } }
+    // grit and mortar raining down with the slabs
+    if (k > 70.2) { const r = rng(71); for (let i = 0; i < 260; i++) {
+      const x = (r() * 2 - 1) * 10, z = -30 + r() * 38, t0 = 70.3 + Math.hypot(x - 2, z) * 0.085 + r() * 0.9, tt = k - t0;
+      if (tt < 0 || tt > 1.7) continue;
+      const y = 13.3 - 4.9 * tt * tt, a = project(cam, [x, y, z]), b = project(cam, [x, y + 9.8 * tt / 48, z]); if (!a || !b) continue;
+      const I = 0.25 * (1 - tt / 1.7); seg(b[0], b[1], a[0], a[1], I, I * 0.95, I * 0.9, 0.9); } }
     if (k > 75.5) { const r = rng(75); for (let i = 0; i < 120; i++) { const x = r() * 1920, y0 = r() * 900, sp = 300 + r() * 500; const y = (y0 + (k - 75.5) * sp) % 1100; const I = 1.2 * sm(75.5, 77, k);
       seg(x, y - sp / 30, x, y, I, I * 0.75, I * 0.45, 1.3); } }
     const tex = SEG.render(sc);
-    const warm = sm(71, 76.5, k), lp = project(cam, [3.7, 0.2, 0]);
     GL.frame({ name: "ch2_hall", fs: HALL, scale: sc, textures: { uSeg: tex },
-      uniforms: { uTime: T, ...camUniforms(cam), uD: [kingAngle(k), Math.max(k - 70, 0), warm, Q()], uM: [sm(75.5, 77.5, k), 1 + 1.6 * sm(76, 78, k), 0, 0] } },
-      { bloom: 0.8, thresh: 1.0, exposure: 1.1, rays: lp ? [lp[0] / W, 1 - lp[1] / H, 0.35 * warm] : [0.5, 0.5, 0], letterbox: LB, vignette: 0.55, t: T, lift: 0.5 * sm(76.5, 78, k) });
+      uniforms: { uTime: T, ...camUniforms(cam), uD: [kingAngle(k), Math.max(k - 70, 0), sm(71, 76.5, k), Q()], uM: [sm(75.5, 77.5, k), 1 + 1.6 * sm(76, 78, k), k, 0] } },
+      { bloom: 0.8, thresh: 1.0, exposure: 1.1, letterbox: LB, vignette: 0.55, t: T, lift: 0.5 * sm(76.5, 78, k) });
     o.save(); o.globalAlpha = alpha; blit(); o.restore();
   }
 
