@@ -91,14 +91,14 @@ vec3 skyC(vec3 rd){
 // ---- light reaching a point inside the cloud skin
 vec3 cloudLight(vec3 p, vec3 rd, float depth, float dn, int lod, float soft){
   float top=exp(-depth/34.);
-  vec3 c=mix(vec3(.0035,.005,.013), vec3(.028,.038,.072), uL.x)*(.28+.72*top);
+  vec3 c=mix(vec3(.003,.005,.014), vec3(.022,.036,.084), uL.x)*(.28+.72*top);
   vec3 L=sunDir(); float od=0.;
   if(lod<2){ int ns=uD.z>.5?4:3; float dd=20.;
     for(int k=0;k<4;k++){ if(k>=ns) break; vec3 q=p+L*dd; od+=clamp((cloudH(q.xz,k==0?1:2)-q.y)/(soft*1.4),0.,1.)*dd; dd*=2.9; } }
   else od=depth*4.;
   float sh=exp(-od*.022), cs=dot(rd,L);
   float ph=mix(mix(hg(cs,.6), hg(cs,-.1), .45), 1., smoothstep(9000.,35000.,length(p-uCamPos)));
-  vec3 lc=mix(vec3(1.,.48,.22), vec3(1.,.72,.44), clamp(uSn.y*.4,0.,1.));
+  vec3 lc=mix(vec3(1.,.58,.34), vec3(1.,.74,.5), clamp(uSn.y*.4,0.,1.))*(.3+.7*smoothstep(.8,.985,cs));   // warm only toward the sun
   c+=lc*(uL.y+uSn.y)*sh*ph*(.25+.75*(1.-exp(-dn*3.)));
   c+=vec3(1.,.6,.3)*uMi.y*.07*sh*ph;
   for(int i=0;i<2;i++){ vec4 P=i==0?uP1:uP2; if(P.z<=0.) continue;
