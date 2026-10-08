@@ -80,16 +80,16 @@ def pipe(freq, dur, family="principal", gain=1.0, attack=0.045, release=0.18, de
     return out * gain / max(1, len(SPECTRA[family])) ** 0.35
 
 
-def organ_note(note, dur, stops, gain=1.0):
+def organ_note(note, dur, stops, gain=1.0, attack=0.045, release=0.18):
     """stops: list of (family, footage, level). Celeste = a string rank doubled 4 cents sharp."""
     f0 = hz(note)
     out = None
     for family, foot, level in stops:
         mult = FOOT[foot]
         if family == "celeste":
-            sig = pipe(f0 * mult, dur, "string", level) + pipe(f0 * mult, dur, "string", level, detune_cents=4.5)
+            sig = pipe(f0 * mult, dur, "string", level, attack, release) + pipe(f0 * mult, dur, "string", level, attack, release, detune_cents=4.5)
         else:
-            sig = pipe(f0 * mult, dur, family, level)
+            sig = pipe(f0 * mult, dur, family, level, attack, release)
         out = sig if out is None else out + sig
     return out * gain
 
@@ -103,6 +103,10 @@ REG = {  # registrations
     "pedal": [("pedal", "16", 1), ("pedal", "8", .5)],
     "pedal_reed": [("pedal", "16", 1), ("reed", "16", .55), ("pedal", "8", .5)],
     "bourdon32": [("pedal", "32", 1), ("pedal", "16", .6)],
+    "flutes": [("flute", "8", 1), ("flute", "4", .45)],
+    "soft_principal": [("principal", "8", .8), ("flute", "8", .5)],
+    "pedal_soft": [("pedal", "16", 1), ("flute", "8", .3)],
+    "aether": [("celeste", "8", .7), ("flute", "4", .25)],
 }
 
 
@@ -240,12 +244,12 @@ def master(org, perc, total):
     ir = cathedral_ir()
     st = np.zeros((2, len(org)))
     for ch in range(2):
-        st[ch] = org * 0.55 + convolve(org, ir[ch]) * 0.75 + perc * 0.5 + convolve(perc, ir[ch]) * 0.6
+        st[ch] = org * 0.42 + convolve(org, ir[ch]) * 0.85 + perc * 0.35 + convolve(perc, ir[ch]) * 0.7
     st = st[:, : int(total * SR)]
     fade = int(1.2 * SR)
     st[:, -fade:] *= np.linspace(1, 0, fade) ** 2
     st /= np.max(np.abs(st)) + 1e-9
-    return np.tanh(st * 1.15) / np.tanh(1.15) * 0.93
+    return np.tanh(st * 0.8) / np.tanh(0.8) * 0.9
 
 
 def write_wav(path, st):
@@ -257,7 +261,66 @@ def write_wav(path, st):
         w.writeframes(data.tobytes())
 
 
-SCORES = {"coldopen": score_coldopen}
+def soft(bus, notes, at, dur, reg, gain, attack=0.9, release=1.6, curve=None):
+    """Every voice breathes in: long pipe attack plus an optional expression swell (a0, a1, power)."""
+    for nt in notes:
+        sig = organ_note(nt, dur, REG[reg], gain, attack=attack, release=release)
+        if curve:
+            sig = swell(sig, *curve)
+        bus.add(sig, at)
+
+
+def score_coldopen_soft():
+    """40 s, no strikes: everything swells. Synced to timeline.js coldOpen."""
+    total = 40.0
+    org, perc = Bus(total), Bus(total)
+    soft(org, ["A1"], 0.0, 12.5, "bourdon32", 0.42, attack=2.5, release=3.0, curve=(0.3, 1.0, 0.7))
+    soft(org, ["E5", "A5"], 0.6, 6.0, "aether", 0.05, attack=2.2, release=2.5)
+    # 4.5–12: the sky opens; A minor (add 9) breathes in, the spark motif on flutes
+    soft(org, ["A3", "C4", "E4", "B4"], 4.5, 7.6, "aether", 0.13, attack=2.6, release=2.2, curve=(0.4, 1.0, 1.0))
+    soft(org, ["A2"], 4.5, 7.6, "pedal_soft", 0.22, attack=2.0, release=2.0)
+    tt = 7.0
+    for nt, d in MOTIF:
+        soft(org, [nt], tt, d * 0.95, "flutes", 0.17, attack=0.25, release=0.9)
+        tt += d
+    # 12–15.5: the eye opens; F major rises from the 32' bourdon
+    soft(org, ["F1"], 11.8, 4.6, "bourdon32", 0.55, attack=1.6, release=2.4, curve=(0.4, 1.2, 1.4))
+    soft(org, ["F3", "A3", "C4", "E4"], 12.0, 4.2, "aether", 0.12, attack=2.0, release=1.6, curve=(0.5, 1.15, 1.2))
+    perc.add(bell("E5", 0.16), 15.5)
+    # 16–18.6: it turns toward you; the music holds its breath
+    soft(org, ["E5"], 16.0, 2.8, "aether", 0.06, attack=0.6, release=1.2)
+    soft(org, ["A1"], 16.0, 2.8, "bourdon32", 0.22, attack=0.8, release=1.0)
+    # 18.6: the gaze locks; F major 9 blooms, vast but gentle
+    soft(org, ["F1"], 18.6, 6.0, "bourdon32", 0.62, attack=1.8, release=2.5)
+    soft(org, ["F2"], 18.6, 6.0, "pedal_soft", 0.32, attack=1.6, release=2.0)
+    soft(org, ["F3", "A3", "C4", "E4", "G4"], 18.6, 5.9, "aether", 0.16, attack=1.8, release=2.0, curve=(0.7, 1.0, 1.0))
+    soft(org, ["C4", "F4", "A4"], 18.9, 5.6, "flutes", 0.09, attack=1.6, release=2.0)
+    tt = 19.6
+    for nt, d in (("A4", 1.0), ("E5", 1.0), ("D5", 1.0), ("C5", 2.0)):
+        soft(org, [nt], tt, d * 0.95, "soft_principal", 0.13, attack=0.22, release=1.0)
+        tt += d
+    # 24.5–29.3: C/E, then D minor 7
+    soft(org, ["E2"], 24.5, 2.2, "pedal_soft", 0.3, attack=1.0, release=1.4)
+    soft(org, ["C4", "E4", "G4", "D5"], 24.5, 2.2, "aether", 0.15, attack=1.0, release=1.4)
+    soft(org, ["D2"], 26.6, 2.9, "pedal_soft", 0.3, attack=1.0, release=1.4)
+    soft(org, ["D4", "F4", "A4", "C5"], 26.6, 2.9, "aether", 0.15, attack=1.0, release=1.4)
+    soft(org, ["F4", "A4"], 26.6, 2.9, "flutes", 0.08, attack=1.0, release=1.4)
+    # 29.7–33: E sus4 -> E, the light grows; the 32' swells beneath
+    soft(org, ["E1"], 29.4, 3.8, "bourdon32", 0.5, attack=1.2, release=0.6, curve=(0.5, 1.4, 1.6))
+    soft(org, ["E3", "A3", "B3", "E4"], 29.7, 1.6, "aether", 0.15, attack=0.8, release=0.5, curve=(0.8, 1.1, 1.0))
+    soft(org, ["E3", "G#3", "B3", "E4"], 31.3, 1.9, "aether", 0.16, attack=0.5, release=0.6, curve=(0.9, 1.35, 1.2))
+    soft(org, ["B3", "E4", "G#4"], 29.7, 3.5, "soft_principal", 0.07, attack=1.4, release=0.6, curve=(0.4, 1.4, 1.5))
+    # 33: A major, the title; soft tutti without reeds, bells far away
+    soft(org, ["A1"], 33.0, 6.0, "bourdon32", 0.6, attack=0.9, release=2.6)
+    soft(org, ["A2"], 33.0, 6.0, "pedal_soft", 0.32, attack=0.9, release=2.4)
+    soft(org, ["A3", "C#4", "E4", "A4", "C#5", "E5"], 33.0, 5.8, "aether", 0.15, attack=0.9, release=2.6)
+    soft(org, ["E4", "A4", "C#5"], 33.1, 5.6, "soft_principal", 0.08, attack=1.0, release=2.6)
+    for nt, at, v in (("A4", 33.2, 0.14), ("E5", 34.0, 0.1), ("C#6", 34.8, 0.08)):
+        perc.add(bell(nt, v), at)
+    return org.x, perc.x, total
+
+
+SCORES = {"coldopen": score_coldopen, "coldopen_soft": score_coldopen_soft}
 
 if __name__ == "__main__":
     org, perc, total = SCORES[sys.argv[1]]()
