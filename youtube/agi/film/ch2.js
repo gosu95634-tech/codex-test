@@ -574,7 +574,7 @@ float frost(vec2 frag, float grow, out vec2 nrm){
   vec2 uv=frag/uRes.y; vec2 c=vec2(.5*uRes.x/uRes.y,.5);
   float ax=.5*uRes.x/uRes.y, ay=.5-.128; vec2 d=uv-c;
   float e=min(ax-abs(d.x),ay-abs(d.y)); float n=fbm(vec3(uv*2.5,1.));
-  float front=grow*.42+(n-.5)*.14; nrm=vec2(0.);
+  nrm=vec2(0.); if(grow<=0.) return 0.; float front=grow*.42+(n-.5)*.14;
   if(e>front+.04) return 0.;
   float mask=smoothstep(front+.04,front-.04,e);
   float f=max(max(fern(uv,c,7.,1.),fern(uv,c,15.,5.)*.8),fern(uv,c,33.,9.)*.6);
@@ -660,7 +660,7 @@ float king(vec3 p){
   d=min(d,sdBox(p-vec3(0.,3.28,0.),vec3(.17,.05,.05))-.01);
   return d; }
 const vec3 KP=vec3(0.,0.,0.);
-float mapK(vec3 p){ vec3 piv=KP+vec3(.6,0.,0.); vec3 q=p-piv; q.xy=rot(uD.x)*q.xy; q+=piv-KP; return king(q); }
+float mapK(vec3 p){ vec3 piv=KP+vec3(.6,0.,0.); vec3 q=p-piv; q.xy=rot(-uD.x)*q.xy; q+=piv-KP; return king(q); }
 float mapH(vec3 p, out float m){
   float d=mapK(p); m=1.;
   vec3 c=p; c.z=mod(c.z+3.,6.)-3.; c.x=abs(c.x)-7.;
@@ -787,13 +787,13 @@ void main(){
   vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
   float t=.1, glow=0.; bool hit=false; int NS=uM.x>.5?180:110; float m=0.;
   for(int i=0;i<180;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float dr=ribs(p), dp=piers(p), df=p.y, dw=ZE-p.z+0.;
-    float d=min(min(dr,dp),min(df, p.z-ZE)); glow+=exp(-dr*22.)*.02*smoothstep(ZE,ZE+60.*uD.x,p.z+0.)*1.+exp(-dp*30.)*.004;
+    float d=min(min(dr,dp),min(df, p.z-ZE)); glow+=exp(-dr*22.)*.0035*smoothstep(ZE,ZE+60.*uD.x,p.z+0.)*1.+exp(-dp*30.)*.0006;
     if(d<.002*t){ hit=true; m= d==dr?1.: d==dp?2.: d==df?3.:4.; break; } t+=d*.85; if(t>80.) break; }
   vec3 p=ro+rd*t; vec3 col=vec3(.004,.003,.003);
   float ign=uD.x;
   vec3 gC=vec3(1.,.66,.32);
   if(hit){
-    if(m==1.) col=gC*4.*ign;
+    if(m==1.) col=gC*2.5*ign;
     else if(m==2.) col=vec3(.09,.07,.05)*(.3+ign)*(1.+.5*sin(p.y*.5));
     else if(m==3.){ vec2 c=floor(p.xz*.5); col=vec3(.05,.04,.03)*(.6+.4*mod(c.x+c.y,2.))*(.4+ign);
       vec3 rr=reflect(rd,vec3(0,1,0)); vec2 rq=(p.xy+rr.xy*((ZE-p.z)/min(rr.z,-1e-3)))-vec2(0.,10.); col+=rose(rq,uD.y,uD.z)*.12; }
@@ -805,7 +805,7 @@ void main(){
   col+=vec3(1.,.72,.4)*uD.y*(.5/(dl*dl*.08+1.))*.35;
   float sh=0.; for(int i=0;i<20;i++){ float s=(float(i)+hash12(gl_FragCoord.xy+uTime))/20.*min(t,60.); vec3 q=ro+rd*s; vec3 dir=normalize(rp-q);
     vec2 w=(q+dir*((ZE-q.z)/min(dir.z,-1e-3))).xy-vec2(0.,10.); sh+=step(length(w),4.2*uD.y)*(.5+.5*noise(vec3(q.xz*.3,uTime*.1))); }
-  col+=vec3(1.,.7,.38)*sh/20.*min(t,60.)*.02*uD.y;
+  col+=vec3(1.,.7,.38)*sh/20.*min(t,60.)*.006*uD.y;
   col*=1.+uD.w*.4;
   col+=texture(uSeg,gl_FragCoord.xy/uRes).rgb;
   fragColor=vec4(col,1.); }`;
@@ -828,7 +828,7 @@ void main(){
     const rp = project(cam, [0, 10, -46]);
     GL.frame({ name: "ch2_nave", fs: NAVE, scale: sc, textures: { uSeg: tex },
       uniforms: { uTime: T, ...camUniforms(cam), uD: [ribs, open, focus, peak], uM: [Q(), 1, 0, 0] } },
-      { bloom: 0.8 + 0.4 * peak, thresh: 1.0, exposure: 1.0 + 0.35 * peak, rays: rp ? [rp[0] / W, 1 - rp[1] / H, 0.25 + 0.35 * open] : [0.5, 0.5, 0], letterbox: LB, vignette: 0.55, t: T, fade: 1 - sm(89.2, 90, k) });
+      { bloom: 0.8 + 0.4 * peak, thresh: 1.0, exposure: 0.95 + 0.15 * peak, rays: rp ? [rp[0] / W, 1 - rp[1] / H, 0.25 + 0.35 * open] : [0.5, 0.5, 0], letterbox: LB, vignette: 0.55, t: T, fade: 1 - sm(89.2, 90, k) });
     o.save(); o.globalAlpha = alpha; blit(); o.restore();
   }
 
