@@ -505,8 +505,8 @@ function scoreText(k) {
   const u = clamp((k - 60.8) / 10.6), y = H / 2 - 8;
   o.save();
   o.globalCompositeOperation = "source-over";
-  const g = o.createRadialGradient(W / 2, y, 0, W / 2, y, 420); g.addColorStop(0, "rgba(0,0,0,0.55)"); g.addColorStop(1, "rgba(0,0,0,0)");
-  o.globalAlpha = a; o.fillStyle = g; o.fillRect(W / 2 - 420, y - 420, 840, 840);
+  const g = o.createRadialGradient(W / 2, y, 0, W / 2, y, 560); g.addColorStop(0, "rgba(0,0,0,0.88)"); g.addColorStop(0.55, "rgba(0,0,0,0.6)"); g.addColorStop(1, "rgba(0,0,0,0)");
+  o.globalAlpha = a; o.fillStyle = g; o.fillRect(W / 2 - 560, y - 560, 1120, 1120);
   o.restore();
   const sp = 0.16 - 0.05 * ease(u * 1.5);
   line("4", W / 2 - 128 - sp * 300, y, { size: 150, font: "SerifL", color: "#f6ecd8", alpha: a, glow: 30, blur: (1 - a) * 8, spacing: 0 });
@@ -524,15 +524,12 @@ void main(){ vec3 rd=camRay(gl_FragCoord.xy);
   vec2 uv=(gl_FragCoord.xy-.5*uRes)/uRes.y;
   c+=vec3(1.,.70,.38)*exp(-dot(uv*vec2(.55,1.5),uv*vec2(.55,1.5))*3.)*.028*uA.x;
   fragColor=vec4(c,1.); }`;
-const WORDS = ["그", "한", "수가", "수백", "년의", "상식을", "뒤집었다"];
+const WORDS = ["그 한 수가", "수백 년의", "상식을", "뒤집었다"];
 const ATT = [ // query row → key weights (hand-set; how a model might read the sentence)
-  [0, .5, .8, 0, 0, 0, 0],
-  [.4, 0, .9, 0, 0, 0, 0],
-  [.4, .9, 0, 0, 0, 0, .6],
-  [0, 0, 0, 0, .9, .3, 0],
-  [0, 0, 0, .9, 0, .7, 0],
-  [0, 0, 0, .4, .7, 0, .8],
-  [.2, .3, .9, 0, .2, 1, 0],
+  [0, .3, .4, .9],
+  [.3, 0, .9, .4],
+  [.4, .9, 0, .8],
+  [1, .3, .9, 0],
 ];
 const WORD_T0 = 73.0, WORD_DT = 0.42, Q_T0 = 76.2, Q_DT = 1.05;
 let WL = null;
@@ -540,7 +537,7 @@ function wordLayout() {
   if (WL) return WL;
   const S = 0.84;
   o.save(); o.font = '100px "SerifM"'; const wd = WORDS.map(w => o.measureText(w).width / 100 * S); o.restore();
-  const gap = 0.95 * S, total = wd.reduce((a, b) => a + b, 0) + gap * (WORDS.length - 1);
+  const gap = 1.9 * S, total = wd.reduce((a, b) => a + b, 0) + gap * (WORDS.length - 1);
   let x = -total / 2; WL = [];
   WORDS.forEach((w, i) => { const cx = x + wd[i] / 2, e = cx / (total / 2);
     WL.push({ w, p: [-cx, 0.18 * Math.sin(i * 1.7 + 0.3), 2.2 * e * e + 0.35 * Math.sin(i * 2.1 + 0.4)], wd: wd[i], S });
