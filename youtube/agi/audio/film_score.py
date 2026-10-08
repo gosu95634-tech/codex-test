@@ -708,9 +708,9 @@ def rise(S):
 
 def climax(S):
     # 455.0 the rise breaks off: full organ tutti, 32' and bells at once - loud but soft-edged (F, the being's chord)
-    S.note("F2", 454.95, 10.3, "b32", 0.8, att=0.4, rel=0.3)
-    S.note("F2", 455.0, 10.2, "ped_tutti", 0.55, att=0.25, rel=0.3)
-    S.chord(["F2", "C3", "F3", "A3", "C4", "F4", "A4", "C5", "F5"], 455.0, 10.2, "plenum", 0.085, att=0.22, rel=0.3,
+    S.note("F2", 454.6, 10.6, "b32", 0.8, att=1.0, rel=0.3)
+    S.note("F2", 454.7, 10.5, "ped_tutti", 0.55, att=0.8, rel=0.3)
+    S.chord(["F2", "C3", "F3", "A3", "C4", "F4", "A4", "C5", "F5"], 454.7, 10.5, "plenum", 0.085, att=0.9, rel=0.3,
             pts=[(0, 1), (5, 1.06), (10, 1.1)])
     S.chord(["A3", "C4", "F4", "A4", "C5"], 455.0, 10.2, "aether", 0.13, att=0.3, rel=0.3)
     S.bell("F3", 455.0, 1.0, major=True, pan=-.2)
@@ -813,8 +813,8 @@ SECTIONS = {
 # (time, fast fade, residual floor, residual decay), applied after the reverb so the room is cut too
 SEGMENTS = {
     "A": (0.0, 27.0, (27.0, 0.10, 0.03, 1.4)),      # 27.0 sudden hush into the pupil
-    "B": (27.0, 455.0, (455.0, 0.06, 0.05, 0.6)),    # 455.0 the rise breaks off
-    "C": (455.0, 465.0, (465.0, 0.25, 0.02, 1.0)),   # 465.0 tutti to near-total silence
+    "B": (27.0, 455.0, (455.0, 0.9, 0.05, 1.4)),     # 455.0 the rise gives way to the tutti (an overlap, not a break)
+    "C": (454.4, 465.0, (465.0, 0.25, 0.02, 1.0)),   # 465.0 tutti to near-total silence (starts early so the tutti can swell in)
     "D": (465.0, TOTAL, None),
 }
 

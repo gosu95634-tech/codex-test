@@ -193,8 +193,8 @@ vec3 sky(vec3 rd, vec3 L){
   float s=max(dot(rd,L),0.), sw=.5+uD.x;
   vec3 c=mix(vec3(.003,.003,.007), vec3(.009,.009,.017), smoothstep(-.4,.7,rd.y));
   float alt=smoothstep(15.,260.,uCamPos.y);                         // from a dusk sky on the ground to space
-  c=mix(c*vec3(3.2,2.6,2.2)+vec3(.02,.018,.022)*smoothstep(.3,-.1,rd.y), c, alt);
-  c+=stars(rd,(.2+1.1*alt)*(1.-smoothstep(.75,.98,s))*(1.-clamp(uD.x*.3,0.,.9)));
+  c=mix(c*vec3(1.6,1.4,1.5)+vec3(.012,.012,.02)*smoothstep(.3,-.1,rd.y), c, alt);
+  c+=stars(rd,(.7+.6*alt)*(1.-smoothstep(.75,.98,s))*(1.-clamp(uD.x*.3,0.,.9)));
   c+=vec3(1.,.95,.86)*pow(s,6000.)*14.*sw + vec3(1.,.84,.6)*pow(s,600.)*1.1*sw + vec3(1.,.72,.45)*pow(s,70.)*.22*sw + vec3(.75,.5,.3)*pow(s,9.)*.035*sw;
   return c; }
 float softShadow(vec3 ro, vec3 rd){ float res=1., t=.03;
@@ -218,12 +218,13 @@ void main(){
   if(!hit && rd.y<0.){ float tg=-(ro.y+.32)/rd.y; if(tg>0.){ hit=true; gnd=true; t=tg; } }
   vec3 sunC=vec3(1.,.86,.64)*(1.5+uD.x*1.4);
   if(hit && gnd){ vec3 p=ro+rd*t;                                   // the stone plaza the staircase rises from
-    vec2 g=p.xz*.5; vec2 f=abs(fract(g)-.5); float joint=smoothstep(.47,.5,max(f.x,f.y));
-    float h=hash12(floor(g)); vec3 base=vec3(.5,.47,.42)*(.75+.25*h)*(1.-joint*.5)*(.85+.15*fbm3(vec3(p.xz*.7,1.)));
+    vec2 g=p.xz*.25; vec2 f=abs(fract(g)-.5); float joint=smoothstep(.485,.497,max(f.x,f.y));
+    float h=hash12(floor(g)); vec3 base=vec3(.075,.07,.068)*(.8+.4*h)*(.85+.3*fbm3(vec3(p.xz*.4,1.)));
     float sh=softShadow(p+vec3(0.,.01,0.),L);
-    vec3 c=base*(sunC*max(L.y,0.)*sh*.8+vec3(.03,.028,.035));
-    c+=vec3(1.,.72,.36)*.05*(1.+uD.x)*exp(-abs(p.x)*.5)*smoothstep(-6.,0.,-p.z+3.);
-    float fogA=1.-exp(-t*.004); c=mix(c, vec3(.03,.028,.035)+vec3(1.,.8,.55)*pow(s,6.)*.1, fogA);
+    vec3 c=base*(sunC*max(L.y,0.)*sh*.6+vec3(.02,.02,.026));
+    vec3 rr=reflect(rd,vec3(0.,1.,0.)); c+=sky(rr,L)*.32*(1.-joint);                 // polished stone mirrors the night
+    c+=vec3(1.,.72,.36)*joint*(.35+.6*uD.x)*exp(-length(p.xz)*.035);                  // gold joints, like the stair inlay
+    float fogA=1.-exp(-t*.003); c=mix(c, vec3(.012,.012,.02)+vec3(1.,.8,.55)*pow(s,6.)*.08, fogA);
     col=c; }
   else if(hit){ vec3 p=ro+rd*t; vec2 e=vec2(.0006*t+.0004,0.); float k2;
     vec3 n=normalize(vec3(map(p+e.xyy,k2)-map(p-e.xyy,k2), map(p+e.yxy,k2)-map(p-e.yxy,k2), map(p+e.yyx,k2)-map(p-e.yyx,k2)));
@@ -283,7 +284,7 @@ void main(){
   function stairFrame(k, T) {
     const cam = stairCam(k), fin = FINAL();
     const v = vAt(k), dt = SHUT * 0.5;
-    const camB = stairCam(k - dt), vel = sub(cam.pos, camB.pos);
+    const camB = stairCam(k - dt), v0 = sub(cam.pos, camB.pos), vl = Math.hypot(...v0), vel = mul3(v0, Math.min(1, 0.5 / Math.max(vl, 1e-6)));
     const swell = 0.25 + 0.75 * smooth(31, 44, k) + 2.2 * easeIn(clamp((k - 43) / 7));
     const haze = smooth(43.5, 49.6, k);
     const L = norm([0, SR, SRUN]);
