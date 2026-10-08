@@ -1,8 +1,5 @@
 """Film score for 「인류의 마지막 발명」: 540 s, composed against the 음악 column of ../script.md.
 
-One emotional arc runs through the whole film: the mix swells and rests with the story, and a string section
-doubles the organ's own chords and melodies only as the music rises.
-
 Every voice models an acoustic instrument in one synthetic cathedral:
 pipe-organ ranks (principal, stopped and harmonic flutes, salicional and voix celeste, open and
 stopped 32'/16' pedal, a little reed only in the tutti), a comb music box, distant church bells
@@ -297,7 +294,6 @@ class Sec:
 
     def note(self, nt, at, dur, reg, gain, att=1.0, rel=1.5, pts=None, place="organ", spread=1.0, trem=0.0, chiff=1.0):
         f0, m = hz(nt), midi(nt)
-        self.dub_note(nt, at, dur, reg, gain, att, rel, pts)
         for fam, foot, lvl in REG[reg]:
             mult = FOOT[foot]
             f = f0 * mult
@@ -330,11 +326,11 @@ class Sec:
 
     def box(self, nt, at, vel=0.5, pan=None):
         m = midi(nt)
-        self.put(music_box(self.rng, hz(nt), vel), at, "box", (m - 84) / 30 if pan is None else pan, 0.75)
+        self.put(music_box(self.rng, hz(nt), vel), at, "box", (m - 84) / 30 if pan is None else pan)
 
     def bell(self, nt, at, vel=0.5, major=False, pan=None):
         p = self.rng.uniform(-.3, .3) if pan is None else pan
-        self.put(bell(self.rng, hz(nt), vel, major), at, "bell", p, 0.6)
+        self.put(bell(self.rng, hz(nt), vel, major), at, "bell", p)
 
     def timp(self, nt, at, vel=0.5):
         self.put(timpani(self.rng, hz(nt), vel), at, "timp", 0.05)
@@ -689,8 +685,6 @@ def rise(S):
     # a high celeste halo (E, B, D, A) breathes in as the registration piles up
     S.chord(["E5", "B5"], 423.0, 32.1, "cel", 0.03, att=8.0, rel=0.3, pts=[(0, .6), (32, 1.4)])
     S.chord(["D6", "A6"], 435.0, 20.1, "cel", 0.02, att=6.0, rel=0.3, pts=[(0, .6), (20, 1.4)])
-    S.strc(["E2", "B2", "E3", "B3"], 397.0, 58.0, 0.09, att=8.0, rel=0.1, trem=0.4, pts=[(0, .35), (30, .7), (58, 1.2)])
-    S.strc(["E5", "B5"], 425.0, 30.0, 0.04, att=8.0, rel=0.1, trem=0.6, pts=[(0, .4), (30, 1.1)])
     mc, sigma = 69.0, 14.0      # spectral bell: centre A4, sigma ~1.2 octaves
     t, s = 397.0, 0
     while t < 454.9:
@@ -801,220 +795,6 @@ def end(S):
     S.line(motif(1, major=True, last=3.0), 523.0, "hfl", 0.032, att=0.3, rel=1.6, place="solo", spread=0.3)
 
 
-# ======================================================================================
-# human voices: felt piano and a string section, so the music can feel what the picture says
-# ======================================================================================
-def piano(rng, f, vel=0.5, dur=1.0):
-    """Felt grand in the nave: stiff-string (inharmonic) partials struck near 1/8 of the string, two-stage decay,
-    unison strings beating, brightness rising with velocity, the damper falling at the end of `dur` (pedal length)."""
-    damp = f < 1800
-    length = (dur + 0.7) if damp else min(6.0, dur + 3.0)
-    length = min(length, 9.0)
-    n = fast_len(int(length * SR))
-    t = np.arange(n, dtype=np.float32) / SR
-    B = 3.5e-5 * (f / 100.0) ** 1.3
-    bright = 700 + 5200 * vel ** 1.4
-    T = 7.5 * (130.0 / f) ** 0.55
-    out = np.zeros(n, np.float32)
-    beat_hz = rng.uniform(0.25, 0.9) if f >= 90 else 0.0
-    for k in range(1, 48):
-        fk = k * f * np.sqrt(1 + B * k * k)
-        if fk > 8500:
-            break
-        a = abs(np.sin(np.pi * k * 0.118)) / k / np.sqrt(1 + (fk / bright) ** 2) * vel ** (0.55 + 0.025 * k)
-        if a < 2e-4:
-            continue
-        ts = T / (1 + fk / 1700)
-        env = 0.62 * np.exp(-t / (ts * 0.17)) + 0.38 * np.exp(-t / ts)
-        ph = rng.uniform(0, 6.28)
-        sig = np.sin(np.float32(2 * np.pi * fk) * t + np.float32(ph))
-        if beat_hz:
-            sig *= 1 + 0.22 * np.cos(np.float32(2 * np.pi * beat_hz * (0.6 + 0.4 * k ** 0.5)) * t + np.float32(ph * 1.7))
-        out += (a * env * sig).astype(np.float32)
-    nh = int(0.02 * SR)
-    th = O.lp(rng.standard_normal(nh), 700 + 1500 * vel) * np.exp(-np.arange(nh) / SR / 0.004)
-    out[:nh] += (th / (np.std(th) + 1e-9) * 0.012 * vel).astype(np.float32)
-    na = int(0.0015 * SR)
-    out[:na] *= np.sin(0.5 * np.pi * np.arange(na) / na) ** 2
-    if damp:
-        i0 = min(n, int(dur * SR))
-        out[i0:] *= np.exp(-np.arange(n - i0) / SR / 0.16).astype(np.float32)
-    out[-int(0.05 * SR):] *= np.linspace(1, 0, int(0.05 * SR)).astype(np.float32)
-    return out * np.float32(0.55)
-
-
-def _body(fk):
-    l1, l2, l3 = np.log2(fk / 290.0), np.log2(fk / 1050.0), np.log2(fk / 2700.0)
-    return 0.45 + np.exp(-l1 * l1 / 0.2) + 0.7 * np.exp(-l2 * l2 / 0.3) + 0.5 * np.exp(-l3 * l3 / 0.25)
-
-
-def strings(rng, f, dur, att=0.6, rel=1.0, pts=None, voices=5, vib=1.0, trem=0.0, bright=1.0, solo=False):
-    """A string section (or one player with solo=True): bowed sawtooth partials through a violin-body response,
-    each player with their own vibrato, tuning and bow; an optional bowed tremolo (trem 0..1)."""
-    n = fast_len(int((dur + rel) * SR) + 64)
-    t = np.arange(n, dtype=np.float32) / SR
-    K = int(min(26, 7000 / f))
-    ks = np.arange(1, K + 1)
-    amps = (1.0 / ks) * _body(ks * f) / np.sqrt(1 + (ks * f / (3800 * bright)) ** 4)
-    fade = np.clip(t / (0.35 if solo else 0.6), 0, 1)
-    out = np.zeros(n, np.float32)
-    nv = 1 if solo else voices
-    for v in range(nv):
-        det = 0.0 if solo else rng.normal(0, 6.0)
-        rate = rng.uniform(5.0, 6.0)
-        depth = vib * (rng.uniform(14, 18) if solo else rng.uniform(5, 10))
-        cents = det + depth * fade * np.sin(2 * np.pi * rate * t + rng.uniform(0, 6.28)) + 2.5 * smooth_noise(rng, n, cutoff=1.2)
-        z = np.exp(1j * (2 * np.pi / SR) * np.cumsum(f * 2 ** (cents / 1200))).astype(np.complex64)
-        zk = z.copy()
-        acc = np.zeros(n, np.complex64)
-        for a in amps:
-            acc += zk * np.complex64(a * np.exp(1j * rng.uniform(0, 6.28)))
-            zk *= z
-        out += acc.imag
-    out /= np.float32(nv ** 0.65)
-    out += (unit_noise(rng, n, min(f * 2.5, 6000), 1.2) * 0.018).astype(np.float32)        # the bow on the string
-    if trem:
-        am = 1 - trem * 0.5 * (1 + np.sin(2 * np.pi * rng.uniform(11.5, 13.5) * t))
-        out *= am.astype(np.float32)
-    env = envelope(n, dur, att, rel, pts)
-    return out * env * np.float32(0.16)
-
-
-PLACE.update({"piano": (0.46, 0.55, .5), "strings": (0.40, 0.86, .5), "ssolo": (0.50, 0.72, .5)})
-
-
-def _str_pan(m):
-    return float(np.clip((60 - m) / 36.0, -0.45, 0.45))     # violins left, cellos and basses right
-
-
-def _piano(self, nt, at, vel=0.5, dur=1.0, pan=None):
-    m = midi(nt)
-    self.put(piano(self.rng, hz(nt), vel, dur), at, "piano", (m - 62) / 45 if pan is None else pan)
-
-
-def _pchord(self, notes, at, vel=0.5, dur=2.0, roll=0.0):
-    for j, nt in enumerate(notes):
-        self.piano(nt, at + j * roll, vel * (1.0 if j == 0 else 0.8), dur)
-
-
-def _pline(self, seq, at, vel=0.5, legato=1.0, pedal=None):
-    tt = at
-    for item in seq:
-        nt, d = item[0], item[1]
-        v = item[2] if len(item) > 2 else vel
-        if nt:
-            for x in (nt if isinstance(nt, (list, tuple)) else [nt]):
-                self.piano(x, tt, v, pedal if pedal else d * legato)
-        tt += d
-    return tt
-
-
-def _parp(self, steps, step, vel, end=None, pattern=(0, 1, 2, 3, 2, 1), cresc=None):
-    """steps: [(time, [notes low->high])]; plays the pattern every `step` s until the next chord (pedal held)."""
-    for i, (at, notes) in enumerate(steps):
-        nxt = steps[i + 1][0] if i + 1 < len(steps) else end
-        tt, k = at, 0
-        while tt < nxt - 1e-6:
-            v = vel if cresc is None else vel * np.interp(tt, cresc[0], cresc[1])
-            nt = notes[pattern[k % len(pattern)] % len(notes)]
-            self.piano(nt, tt + self.rng.uniform(-0.006, 0.006), v * (1.08 if k % len(pattern) == 0 else 1.0), nxt - tt + 0.15)
-            tt += step
-            k += 1
-
-
-def _str(self, nt, at, dur, gain, att=0.6, rel=1.0, pts=None, voices=5, vib=1.0, trem=0.0, bright=1.0, solo=False):
-    m = midi(nt)
-    sig = strings(self.rng, hz(nt), dur, att, rel, pts, voices, vib, trem, bright, solo)
-    self.put(sig, at, "ssolo" if solo else "strings", _str_pan(m) * (0.5 if solo else 1.0), gain)
-
-
-def _strc(self, notes, at, dur, gain, **kw):
-    for nt in notes:
-        self.str(nt, at, dur, gain, **kw)
-
-
-def _sline(self, seq, at, gain, overlap=0.12, solo=True, **kw):
-    """A sung string melody: each note slightly overlaps the next (legato bow change)."""
-    tt = at
-    for item in seq:
-        nt, d = item[0], item[1]
-        extra = dict(kw)
-        if len(item) > 2:
-            extra.update(item[2])
-        if nt:
-            self.str(nt, tt, d + overlap, gain, att=extra.pop("att", 0.18), rel=extra.pop("rel", 0.5), solo=solo, **extra)
-        tt += d
-    return tt
-
-
-def _sprog(self, steps, end, gain, overlap=0.5, bass=True, **kw):
-    """String chords: steps = [(time, [notes])]; with bass, the lowest note is doubled an octave down (basses)."""
-    for i, (at, notes) in enumerate(steps):
-        nxt = steps[i + 1][0] if i + 1 < len(steps) else end
-        d = nxt - at + overlap
-        self.strc(notes, at, d, gain, **kw)
-        if bass:
-            low = notes[0]
-            self.str(low[:-1] + str(int(low[-1]) - 1), at, d, gain * 0.9, **kw)
-
-
-Sec.piano, Sec.pchord, Sec.pline, Sec.parp = _piano, _pchord, _pline, _parp
-Sec.str, Sec.strc, Sec.sline, Sec.sprog = _str, _strc, _sline, _sprog
-
-
-def _roll(self, nt, t0, t1, v0, v1):
-    """Timpani roll with soft sticks, swelling from v0 to v1."""
-    n = int((t1 - t0) * 14)
-    for i in range(n):
-        u = i / max(1, n - 1)
-        self.timp(nt, t0 + i / 14 + self.rng.uniform(-0.008, 0.008), (v0 + (v1 - v0) * u ** 1.5) * self.rng.uniform(0.85, 1.1))
-
-
-Sec.roll = _roll
-
-
-# ======================================================================================
-# the emotional arc: one intensity curve for the whole film (0 rest .. 1 peak). It shapes the whole mix, and the
-# string section joins the organ - same chords, same melody - only as the story rises, so rises really rise.
-# ======================================================================================
-ARC = [(0, .15), (14, .4), (21.5, .55), (26.9, 1.0), (27.4, .3), (34, .55), (40.4, 1.0), (44, .75), (47, .3),
-       (65, .3), (81, .5), (91, .65), (100.8, .95), (101.5, .45), (106.5, .7), (113, .3),
-       (133, .35), (147, .6), (158.5, .55), (160.5, .2), (177, .2), (183, .4), (186, .15), (189, .4), (195, 1.0), (199, .7), (203, .3),
-       (209, .3), (230.8, .8), (231.2, 1.0), (240, .8), (245, .35), (252.8, .4), (253.3, .9), (262, .6), (264, .25), (275, .35),
-       (289, .7), (298, 1.0), (303, .45),
-       (309, .4), (325, .65), (343, .55), (349.2, .75), (353, .5), (366.2, .85), (372, .7), (378.9, 1.0), (386, .8), (397, .9),
-       (397.5, .55), (454.9, .85), (455.1, 1.0), (465, 1.0), (466, .05), (469, .2), (475, .25),
-       (480, .35), (492, .6), (506, .9), (510.2, 1.0), (515, .7), (522, .4), (540, .1)]
-_AT, _AV = np.array([a for a, _ in ARC]), np.array([v for _, v in ARC])
-
-
-def arc(t):
-    return np.interp(t, _AT, _AV)
-
-
-# organ registration -> (string role, level relative to the organ note)
-DUB = {"cel": ("pad", 2.4), "aether": ("pad", 2.0), "chorus": ("pad", 1.6), "plenum": ("pad", 1.4), "plenum_soft": ("pad", 1.6),
-       "prin": ("pad", 1.8), "dark": ("pad", 2.2), "fl84": ("pad", 1.5), "spr": ("mel", 3.0), "hfl": ("mel", 3.4),
-       "ped": ("bass", 1.6), "ped_open": ("bass", 1.4), "ped_mel": ("bass", 1.6), "ped_tutti": ("bass", 1.2)}
-
-
-def _dub(self, nt, at, dur, reg, gain, att, rel, pts):
-    """The strings double an organ note, as loud as the arc allows at that moment."""
-    if not getattr(self, "dub", True) or reg not in DUB or dur < 0.8:
-        return
-    a = float(arc(at + min(dur, 4.0) * 0.5))
-    if a <= 0.25:
-        return
-    role, k = DUB[reg]
-    g = gain * k * ((a - 0.25) / 0.75) ** 1.4
-    if role == "bass":                         # the 16' sounds an octave below: cellos and basses there
-        nt = nt[:-1] + str(int(nt[-1]) - 1)
-    self.str(nt, at, dur, g, att=max(att, 0.35), rel=max(rel, 0.4), pts=pts, voices=6 if role == "mel" else 4)
-
-
-Sec.dub_note = _dub
-
-
 # section name -> (start, end, composer, master segment)
 SECTIONS = {
     "cold_a": (0.0, 27.0, cold_a, "A"),
@@ -1043,12 +823,7 @@ def render_section(name):
     t_start = time.time()
     t0, t1, fn, _ = SECTIONS[name]
     S = Sec(name, t0, t1, seed=sum(map(ord, name)) * 7919)
-    S.dub = name != "rise"                      # the Shepard pipes stay organ only
     fn(S)
-    t = S.start + np.arange(S.n, dtype=np.float32) / SR
-    mac = (0.5 + 0.8 * arc(t)).astype(np.float32)   # the whole mix follows the arc (about 8 dB from rest to peak)
-    S.dry *= mac
-    S.send *= mac
     return name, S.start, S.dry, S.send, time.time() - t_start
 
 
