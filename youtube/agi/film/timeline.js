@@ -25,69 +25,99 @@ function heavensRings(spin) {
   for (let i = 0; i < 6; i++) out.push(...mul(mul(rx(1.0 + i * 0.83 + spin * (0.05 + i * 0.011)), ry(i * 1.27 + spin * (0.03 - i * 0.008))), rz(i * 0.52)));
   return out;
 }
-// ---------- cold open (0–40 s): a tiny human on a ridge; the camera lifts its gaze; the being finds the viewer
-const ENT = { pos: [0, 2700, 5600], S: 1250 };
-const SOCK_HEAVENS = (() => { const [x, y, z] = ENT.pos, l = Math.hypot(x, y, z); return [-x, -y, -z - 0.25 * l]; })(); // eye socket faces the land
-const RING_PHASE = 383.55; // searched so no ring is edge-on across the pupil during 16–33 s (min |n·view| = 0.37)
-function ridgeY(x) { return 1.15 + 0.22 * Math.sin(x * 0.21) + 0.1 * Math.sin(x * 0.9 + 1) - 0.0016 * x * x; }
-function drawRidge(cam) {
-  const pts = []; for (let x = -60; x <= 60; x += 0.5) { const q = project(cam, [x, ridgeY(x), 14]); if (q) pts.push(q); }
-  if (pts.length < 2) return;
-  o.save(); o.beginPath(); o.moveTo(pts[0][0], H + 10); pts.forEach(([x, y]) => o.lineTo(x, y)); o.lineTo(pts[pts.length - 1][0], H + 10); o.closePath();
-  o.fillStyle = "#020203"; o.fill();
-  o.beginPath(); pts.forEach(([x, y], i) => i ? o.lineTo(x, y) : o.moveTo(x, y)); o.strokeStyle = "rgba(255,214,160,0.28)"; o.lineWidth = 1.5; o.stroke(); o.restore();
+// ---------- shared helpers for every chapter (see CHAPTERS.md)
+const FINAL = () => window.QUALITY === "final";
+const SC = (pre = 0.55, fin = 1.5) => FINAL() ? fin : pre;               // scene render scale: preview vs final (GPU)
+// Clip 2D drawing to the picture area between the letterbox bars.
+function pic(fn) { o.save(); o.beginPath(); o.rect(0, BAR, W, H - 2 * BAR); o.clip(); fn(); o.restore(); }
+function bars() { o.save(); o.fillStyle = "#000"; o.fillRect(0, 0, W, BAR); o.fillRect(0, H - BAR, W, BAR); o.restore(); }
+// Draw the GL canvas onto the 2D layer.
+function blit() { o.drawImage(GL.canvas, 0, 0); }
+// Chapters register themselves; master.js lays them end to end. fn(k, T): k = seconds into the chapter, T = film time.
+const CHAPTERS = {};
+function chapter(id, len, fn) { CHAPTERS[id] = { len, fn }; }
+// Chapter title card, identical in every chapter: Roman numeral, hairline, Korean title. k = seconds since the card began.
+function chapterCard(k, numeral, title, dur = 6) {
+  const a = smooth(0.4, 1.8, k) * (1 - smooth(dur - 1.3, dur - 0.2, k));
+  if (a <= 0) return;
+  const u = clamp(k / dur);
+  line(numeral, W / 2, H / 2 - 62, { size: 84, font: "Corm", color: GOLD, spacing: 0.5 - 0.12 * ease(u * 1.4), alpha: a, glow: 22, blur: (1 - a) * 5 });
+  o.save(); o.globalAlpha = a * 0.7; o.fillStyle = GOLD; const hw = 120 * smooth(0.9, 2.6, k); o.fillRect(W / 2 - hw, H / 2 - 4, hw * 2, 1); o.restore();
+  line(title, W / 2, H / 2 + 52, { size: 46, spacing: 0.34 - 0.08 * ease(u * 1.4), alpha: a * smooth(0.9, 2.3, k) / Math.max(smooth(0.4, 1.8, k), 1e-3), glow: 14, blur: (1 - a) * 4 });
 }
-function drawFigure(cam, t) { // a lone figure, head tilted up toward the sky
-  const foot = project(cam, [1.4, ridgeY(1.4), 14]), head = project(cam, [1.4, ridgeY(1.4) + 1.75, 14]);
-  if (!foot || !head) return;
-  const h = foot[1] - head[1], s = h / 560;
-  o.save(); o.translate(foot[0], foot[1]); o.scale(s, s);
-  const p = new Path2D(), blob = (x, y, rx, ry) => { p.moveTo(x + rx, y); p.ellipse(x, y, rx, ry, 0, 0, 7); };
-  p.moveTo(-20, -440); p.bezierCurveTo(-62, -434, -92, -426, -96, -392); p.lineTo(-100, -230); p.lineTo(-86, -228); p.lineTo(-84, -330);
-  p.lineTo(-104 - Math.sin(t * 1.3) * 6, -150); p.lineTo(-44, -148); p.lineTo(-40, 0); p.lineTo(-8, 0); p.lineTo(-10, -150);
-  p.lineTo(10, -150); p.lineTo(8, 0); p.lineTo(40, 0); p.lineTo(44, -148); p.lineTo(104 + Math.sin(t * 1.3 + 1) * 8, -150); p.lineTo(84, -330);
-  p.lineTo(86, -228); p.lineTo(100, -230); p.lineTo(96, -392); p.bezierCurveTo(92, -426, 62, -434, 20, -440); p.closePath();
-  p.rect(-15, -458, 30, 24); blob(4, -500, 34, 44);
-  o.shadowColor = "rgba(255,210,150,0.7)"; o.shadowBlur = 14; o.strokeStyle = "rgba(255,220,170,0.55)"; o.lineWidth = 5; o.stroke(p);
-  o.shadowBlur = 0; o.fillStyle = "#010102"; o.fill(p); o.restore();
+// ---------- cold open (0–47 s): rise through the clouds, the eye descends and fills the frame, then the people below
+const CLOUD = [1300, 2300];
+const ES = 4200;                                                         // entity scale (great eye radius = 0.66·ES)
+// The light is first a wrong star far above the cloud sea, then descends toward the camera: distance shrinks
+// geometrically so its size on screen grows steadily.
+const P_TOP = [0, 2900, -1200], D_FAR = 150000, D_NEAR = 13000;
+function eDescent(t) {
+  const x = clamp((t - 14) / 10), u = 1 - Math.pow(1 - x, 2.2), D = Math.exp(lerp(Math.log(D_FAR), Math.log(D_NEAR), u)), th = lerp(0.42, 0.3, u);
+  return { E: [P_TOP[0], P_TOP[1] + D * Math.sin(th), P_TOP[2] + D * Math.cos(th)], D };
+}
+const E_LOW = [0, 4200, 6500];                                           // above the valley, seen from the people
+const SOCK_DOWN = norm(sub([0, 0, -200], eDescent(24).E));                 // before it finds you, it watches the valley
+const SOCK_CROWD = norm(sub([0, 1.7, -150], E_LOW));
+const RING_PHASE = 383.55;
+// Monotone-ish Catmull-Rom through [time, value] keys.
+function keys(K, t) {
+  if (t <= K[0][0]) return K[0][1]; if (t >= K[K.length - 1][0]) return K[K.length - 1][1];
+  let i = 0; while (t > K[i + 1][0]) i++;
+  const [t1, p1] = K[i], [t2, p2] = K[i + 1], p0 = (K[i - 1] || K[i])[1], p3 = (K[i + 2] || K[i + 1])[1], u = (t - t1) / (t2 - t1);
+  const m1 = (p2 - p0) / 2, m2 = (p3 - p1) / 2, u2 = u * u, u3 = u2 * u;
+  return (2 * u3 - 3 * u2 + 1) * p1 + (u3 - 2 * u2 + u) * m1 + (-2 * u3 + 3 * u2) * p2 + (u3 - u2) * m2;
+}
+const pitchCam = (pos, pitch, yaw = 0, fov = 1.25) => ({ pos, fwd: [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)], up: [0, 1, 0], fov });
+function worldFrame(t, cam, o2) {
+  const E = o2.E, fin = FINAL(), D = Math.hypot(...sub(E, cam.pos));
+  const q = project(cam, E), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.9;
+  GL.frame({ name: "world", fs: SHADERS.world, scale: fin ? 1.5 : 0.55,
+    uniforms: { uTime: t, ...camUniforms(cam), uA: [o2.open, o2.ringOpen, o2.core, 0.6], uB: [o2.ground, o2.gaze, t * 0.01, Math.min(1, 14000 / D)], uC: [...E, ES],
+      uD: [CLOUD[0], CLOUD[1], fin ? 1 : 0, o2.crowd ?? 1], uRing: heavensRings(RING_PHASE + t * 0.04), uSock: o2.sock } },
+    { bloom: o2.bloom ?? 0.5, thresh: 1.3, exposure: o2.exposure ?? 1.0, rays: [rx, ry, q ? (o2.rays ?? 0.3) : 0], letterbox: LB, vignette: 0.6, lift: o2.lift ?? 0, fade: o2.fade ?? 1, t });
+  blit();
 }
 function coldOpen(t) {
-  if (t < 33) {
-    const eye = [0, 0.9, 0];
-    const lookA = [0, 26, 100], lookB = ENT.pos;
-    const tilt = easeIO(clamp((t - 4.5) / 7.5));
-    const dir = norm(sub(lerp3(lookA, lookB, tilt), eye));
-    const fov = 1.2 + 0.75 * easeIO(clamp((t - 12) / 9)) + 0.15 * clamp((t - 21) / 12);
-    const cam = { pos: eye, fwd: dir, up: [0, 1, 0], fov };
-    const eyeOpen = smooth(12, 15.5, t), ringOpen = smooth(8.5, 12.5, t), gaze = smooth(16, 18.6, t);
-    const core = 1.0 + 1.6 * smooth(27, 32.5, t), white = smooth(31.2, 33, t);
-    const q = project(cam, ENT.pos), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.9;
-    GL.frame({ name: "heavens", fs: SHADERS.heavens, scale: 0.7, uniforms: { uTime: t, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0.6], uB: [t * 0.06, gaze, t * 0.012, 1.0], uC: [...ENT.pos, ENT.S], uRing: heavensRings(RING_PHASE + t * 0.06), uSock: SOCK_HEAVENS } },
-      { bloom: 0.45 + 0.35 * smooth(27, 32, t), thresh: 1.4, exposure: 0.95 + 0.6 * smooth(28, 33, t), rays: [rx, ry, 0.2 + 0.45 * smooth(26, 32, t)], letterbox: LB, vignette: 0.65, lift: white, t });
-    o.drawImage(GL.canvas, 0, 0);
-    if (tilt < 0.98) { o.save(); o.beginPath(); o.rect(0, BAR, W, H - 2 * BAR); o.clip(); drawRidge(cam); drawFigure(cam, t); o.restore(); }
+  if (t < 14) { // A. the long rise: valley floor, up through the cloud deck, out under the stars; a wrong star burns far above
+    const y = keys([[0, 30], [3.5, 380], [6, 1250], [9, 2350], [11.5, 2800], [14, 2900]], t);
+    const pos = [lerp(-140, 0, easeIO(t / 14)), y, lerp(-2600, -1200, easeIO(t / 14))];
+    const pitch = keys([[0, 0.09], [4, 0.15], [6.5, 0.2], [9.5, 0.26], [14, 0.22]], t);
+    worldFrame(t, pitchCam(pos, pitch, 0, 1.25), { E: eDescent(0).E, open: 0, ringOpen: 0, core: 1.3 + 0.4 * smooth(9, 14, t), ground: 0.75, gaze: 0, sock: SOCK_DOWN,
+      rays: 0.35, exposure: 1.15 - 0.15 * smooth(8, 12, t), fade: smooth(0, 3, t) });
+  } else if (t < 27) { // B. it descends and grows; the eye opens, finds you, fills the frame, and you fall into the pupil
+    const k = t - 14, { E } = eDescent(t);
+    const pos = lerp3(P_TOP, [0, 3050, -800], easeIO(k / 13));
+    const dir = norm(sub(E, pos)), drop = 0.2 * (1 - smooth(4, 9, k));
+    const pitch = Math.asin(dir[1]) - drop, yaw = Math.atan2(dir[0], dir[2]);
+    const fov = 1.25 + 2.25 * easeIn(clamp((k - 10) / 2)) + 9 * easeIn(clamp((k - 11.2) / 1.8));
+    worldFrame(t, pitchCam(pos, pitch, yaw, fov), { E, open: smooth(2, 5, k), ringOpen: smooth(3, 6.5, k), core: 1.7, ground: 0.75, gaze: smooth(5.2, 7.5, k), sock: SOCK_DOWN,
+      rays: 0.35 * (1 - smooth(11, 12.5, k)), exposure: 1.1 });
+  } else if (t < 40.5) { // C. the people: faces lit by it, then the sea of them beneath the eye; white
+    const k = t - 27;
+    const front = k2 => { const u = easeIO(clamp(k2 / 6.8));            // crane above the front rows: faces turned up into its light
+      return pitchCam(lerp3([3, 8, 4], [-2, 12.5, 14], u), lerp(-0.36, -0.3, u), Math.PI + 0.05, 1.0); };
+    const wide = k2 => { const u = easeIO(clamp(k2 / 7.3));
+      return pitchCam(lerp3([0, 34, -650], [0, 68, -760], u), lerp(0.19, 0.22, u), 0, 0.75); };
+    const base = { E: E_LOW, open: 1, ringOpen: 1, gaze: 1, sock: SOCK_CROWD, ground: 1.0 };
+    const x = smooth(6.2, 6.9, k);                                    // dissolve front -> wide at 33.2–33.9
+    if (x < 1) worldFrame(t, front(k), { ...base, core: 1.7, rays: 0, bloom: 0.45, exposure: 1.05, fade: smooth(0, 1.4, k) });
+    if (x > 0) { o.save(); o.globalAlpha = x; const k2 = k - 6.2, white = smooth(5.3, 7.0, k2 + 0.3);
+      worldFrame(t, wide(k2), { ...base, core: 1.6 + 2.0 * smooth(3, 7, k2), rays: 0.35 + 0.4 * smooth(3, 7, k2), bloom: 0.5 + 0.35 * smooth(3, 7, k2), exposure: 1.0 + 0.5 * smooth(4, 7, k2), lift: white });
+      o.restore(); }
   } else { // title out of the white
-    const k = t - 33;
+    const k = t - 40.5;
     const cam = CAMF([0, 0, 0], [0, 0, 1], 1.2);
     GL.frame({ name: "space", fs: SHADERS.space, scale: 0.5, uniforms: { uTime: t, ...camUniforms(cam), uA: [0, 0.0, 0.22 * (1 - smooth(0, 5, k)), 0] } },
-      { bloom: 0.6, thresh: 1.0, exposure: 0.8, rays: [0.5, 0.5, 0], letterbox: LB, vignette: 0.6, lift: 1 - smooth(0, 1.8, k), fade: 1 - smooth(5.8, 7, k), t });
-    o.drawImage(GL.canvas, 0, 0);
-    const a = smooth(0.8, 2.6, k) * (1 - smooth(5.6, 6.8, k));
+      { bloom: 0.6, thresh: 1.0, exposure: 0.8, rays: [0.5, 0.5, 0], letterbox: LB, vignette: 0.6, lift: 1 - smooth(0, 1.8, k), fade: 1 - smooth(5.3, 6.5, k), t });
+    blit();
+    const a = smooth(0.8, 2.6, k) * (1 - smooth(5.1, 6.3, k));
     line("인류의 마지막 발명", W / 2, H / 2 - 30, { size: 92, spacing: 0.3 - 0.06 * ease(k / 4), alpha: a, glow: 24, blur: (1 - a) * 6 });
     o.save(); o.globalAlpha = a * 0.8; o.fillStyle = GOLD; const hw = 160 * smooth(1.2, 2.8, k); o.fillRect(W / 2 - hw, H / 2 + 40, hw * 2, 1); o.restore();
-    line("AI의 역사, 그리고 AGI와 ASI", W / 2, H / 2 + 90, { size: 30, spacing: 0.32, color: GOLD, alpha: smooth(1.8, 3.2, k) * (1 - smooth(5.6, 6.8, k)), glow: 8 });
+    line("AI의 역사, 그리고 AGI와 ASI", W / 2, H / 2 + 90, { size: 30, spacing: 0.32, color: GOLD, alpha: smooth(1.8, 3.2, k) * (1 - smooth(5.1, 6.3, k)), glow: 8 });
   }
-  caption(t, 19.0, 24.0, (a, u) => capB("우리는 본다.   AGI는 이미 도착했다.", a, u));
-  caption(t, 24.5, 29.3, (a, u) => capB("그리고 1~2년 뒤,   그것은 인간을 넘어설 것이다.", a, u));
-  caption(t, 29.7, 33.0, (a, u) => capB("이것은 그 지능이 태어나기까지의 이야기다", a, u));
+  caption(t, 21.6, 26.6, (a, u) => capB("우리는 본다.   AGI는 이미 도착했다.", a, u));
+  caption(t, 28.6, 33.6, (a, u) => capB("그리고 1~2년 뒤,   그것은 인간을 넘어설 것이다.", a, u));
+  caption(t, 34.3, 38.9, (a, u) => capB("이것은 그 지능이 태어나기까지의 이야기다", a, u));
 }
 const lerp3 = (a, b, u) => [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u)];
-
-const SEGMENTS = [[0, 40, coldOpen]];
-function drawFrame(t) {
-  o.setTransform(1, 0, 0, 1, 0, 0); o.clearRect(0, 0, W, H); o.fillStyle = "#000"; o.fillRect(0, 0, W, H);
-  for (const [t0, t1, fn] of SEGMENTS) if (t >= t0 && t < t1) { fn(t); break; }
-  grainOver(Math.floor(t * 24), 0.045);
-}
-window.FILM_DURATION = SEGMENTS[SEGMENTS.length - 1][1];
-window.renderFrame = t => { drawFrame(t); return out.toDataURL("image/jpeg", 0.95).slice(23); };
+chapter("cold", 47, k => coldOpen(k));

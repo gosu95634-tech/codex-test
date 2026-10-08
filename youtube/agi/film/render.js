@@ -1,4 +1,5 @@
-// Renders film.html at 24 fps into ffmpeg. usage: node render.js <out.mp4> --from s --to s [--stills t1,t2] [--gpu]
+// Renders film.html at 24 fps into ffmpeg.
+// usage: node render.js <out.mp4> --from s --to s|auto [--stills t1,t2] [--only ch3] [--gpu] [--quality final|preview] [--duration]
 const { chromium } = require("playwright");
 const { spawn } = require("child_process");
 const fs = require("fs");
@@ -21,11 +22,15 @@ async function launch() {
   const browser = await launch();
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 } });
   page.on("pageerror", e => { console.error("pageerror:", e.message); process.exitCode = 1; });
-  await page.goto("file://" + path.resolve(__dirname, "film.html"));
+  page.on("console", m => { if (m.type() === "error") console.error("console:", m.text()); });
+  const only = opt("--only", "");
+  await page.goto("file://" + path.resolve(__dirname, "film.html") + (only ? `?only=${only}` : ""));
   const info = await page.evaluate(() => window.ready());
+  await page.evaluate(q => { window.QUALITY = q; }, opt("--quality", gpu ? "final" : "preview"));
   if (info.fonts < 7) throw new Error("fonts missing: " + JSON.stringify(info));
   console.error(`renderer: ${info.renderer}`);
   if (gpu && /swiftshader|llvmpipe|software/i.test(info.renderer || "")) console.error("warning: GPU mode requested but the browser fell back to software rendering");
+  if (args.includes("--duration")) { console.log(JSON.stringify(await page.evaluate(() => ({ duration: window.FILM_DURATION, segments: window.SEGMENT_TABLE })))); await browser.close(); return; }
   if (to === "auto") to = await page.evaluate(() => window.FILM_DURATION);
   to = Number(to);
   const grab = t => page.evaluate(t => window.renderFrame(t), t);

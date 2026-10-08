@@ -40,6 +40,8 @@ in vec2 p; out vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p,
     for (const [name, v] of Object.entries(uniforms)) {
       const loc = prog.u[name]; if (!loc) continue;
       if (typeof v === "number") gl.uniform1f(loc, v);
+      else if (v.float) gl.uniform1fv(loc, v.float); else if (v.vec2) gl.uniform2fv(loc, v.vec2); else if (v.vec3) gl.uniform3fv(loc, v.vec3);
+      else if (v.vec4) gl.uniform4fv(loc, v.vec4); else if (v.mat3) gl.uniformMatrix3fv(loc, false, v.mat3);
       else if (v.length === 2) gl.uniform2fv(loc, v); else if (v.length === 3) gl.uniform3fv(loc, v); else if (v.length === 4) gl.uniform4fv(loc, v); else if (v.length === 9 || (v.length > 16 && v.length % 9 === 0)) gl.uniformMatrix3fv(loc, false, v);
       else gl.uniform4fv(loc, v);
     }
@@ -55,6 +57,20 @@ in vec2 p; out vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p,
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 19, 19, 0, gl.RGBA, gl.UNSIGNED_BYTE, data);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     return boardTex;
+  }
+
+  // Upload a 2D canvas (text, engraving, paper) as a texture once and cache it by key. Draw the canvas after fonts are ready.
+  const texCache = {};
+  function canvasTex(key, src, { mip = true, repeat = false } = {}) {
+    if (texCache[key]) return texCache[key];
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    if (mip) gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, mip ? gl.LINEAR_MIPMAP_LINEAR : gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    const wrap = repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE; gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
+    return (texCache[key] = tex);
   }
 
   /** Render one frame. scene = { fs, uniforms, scale, textures }, post = { bloom, exposure, rays:[x,y,amt], letterbox, vignette, ca, grain, t } */
@@ -78,5 +94,5 @@ in vec2 p; out vec2 vUv; void main(){ vUv = p * 0.5 + 0.5; gl_Position = vec4(p,
     }, { uScene: sc.tex, uBloomTex: a.tex, uRays: r.tex });
     return canvas;
   }
-  return { canvas, gl, frame, setBoard, hdr, renderer };
+  return { canvas, gl, frame, setBoard, canvasTex, hdr, renderer };
 })();

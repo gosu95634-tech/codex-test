@@ -17,6 +17,13 @@ html, body { margin: 0; background: #000; } canvas { display: block; }
 <script src="overlay.js"></script>
 <script src="timeline.js"></script>
 <script>
+// Chapter files. ?only=<id> loads just the file that defines that chapter, so one broken chapter cannot stop the others.
+{ const only = new URLSearchParams(location.search).get("only"), FILES = { ch1: "ch1.js", ch2: "ch2.js", ch3: "ch3.js", ch4: "ch4.js", ch5: "ch5.js", ch6: "ch6.js", end: "ch6.js" };
+  const want = only ? (only === "cold" ? [] : [FILES[only]]) : [...new Set(Object.values(FILES))];
+  for (const f of want) document.write(`<script src="${f}" onerror="this.remove()"><\/script>`); }
+</script>
+<script src="master.js"></script>
+<script>
 window.ready = async () => { await Promise.all(["SerifL", "SerifM", "SerifB", "SansL", "Corm", "CormI", "CormSB"].map(f => document.fonts.load(`40px "${f}"`, "가A"))); return { fonts: [...document.fonts].filter(f => f.status === "loaded").length, hdr: GL.hdr, renderer: GL.renderer }; };
 </script>
 </body></html>

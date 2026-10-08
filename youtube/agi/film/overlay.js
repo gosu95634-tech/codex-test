@@ -4,6 +4,7 @@ const out = document.getElementById("out"), o = out.getContext("2d");
 const GOLD = "#f3d9a4", STAR = "#f4f1ea", DIMW = "rgba(244,241,234,0.55)";
 const clamp = (x, a = 0, b = 1) => Math.max(a, Math.min(b, x));
 const lerp = (a, b, u) => a + (b - a) * u;
+const easeIn = u => Math.pow(clamp(u), 3);
 const ease = u => { u = clamp(u); return u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2; };
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
