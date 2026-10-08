@@ -122,9 +122,9 @@ void main(){
   fragColor=vec4(col,1.); }`;
 
   // spiral clock: angular speed grows exponentially, from a slow turn under the card to a blur by 30 s
-  const W0 = 0.09, TS = 6.6;
-  const omega = k => W0 * Math.exp(k / TS);
-  const Omega = k => W0 * TS * (Math.exp(k / TS) - 1) + 1.3;
+  // already turning briskly under the card, accelerating smoothly to a capped speed (never a blur that makes you dizzy)
+  const omega = k => 0.45 + 4.5 * Math.pow(clamp(k / 30), 1.8);
+  const Omega = k => 0.45 * k + 4.5 * 30 / 2.8 * Math.pow(clamp(k / 30), 2.8) + 1.3;
   const BETA = 0.32, SHUT = 1 / 24, BGOLD = 0.30635;
   const dfac = r => 0.62 + 0.38 * Math.pow(r * r + 0.25, -0.45);
 
@@ -134,10 +134,10 @@ void main(){
     const az = 0.5 - 0.35 * easeIO(clamp(k / 30));
     const pos = [D * Math.cos(el) * Math.sin(az), D * Math.sin(el), -D * Math.cos(el) * Math.cos(az)];
     const at = [0, D * 0.4 * (1 - smooth(4, 10.5, k)), 0];
-    return look(pos, at, 1.3, 0.24 * easeIn(clamp(k / 30)));
+    return look(pos, at, 1.3, 0);
   }
   // embers: 3D sparks orbiting with the spiral and falling inward (log-radius wraps, so the flow never ends)
-  const EMB = (() => { const r = rng(505), a = []; for (let i = 0; i < 420; i++) a.push({ lr: r(), th: r() * TAU, y: (r() + r() + r() - 1.5) * 0.5, b: 0.3 + r() * r() * 1.7 }); return a; })();
+  const EMB = (() => { const r = rng(505), a = []; for (let i = 0; i < 900; i++) a.push({ lr: r(), th: r() * TAU, y: (r() + r() + r() - 1.5) * 0.5, b: 0.3 + r() * r() * 1.7 }); return a; })();
   function emberPos(e, k) {
     const O = Omega(k), span = Math.log(16 / 0.45);
     let lr = (e.lr - BETA * BGOLD * O / span) % 1; if (lr < 0) lr += 1;
@@ -161,18 +161,19 @@ void main(){
   function spiralFrame(k, T) {
     const cam = spiralCam(k), fin = FINAL();
     const card = 1 - smooth(4.5, 9, k);
-    const armB = (0.32 + 0.68 * smooth(1.5, 8.5, k)) * (1 + 0.3 * smooth(10, 30, k));
-    const dive = smooth(29.0, 30, k);
+    const armB = (0.55 + 0.45 * smooth(1.5, 8.5, k)) * (1 + 0.3 * smooth(10, 30, k)) * (1 + 0.1 * Math.sin(k * 1.9));   // the arms breathe
+    const dive = 0.35 * smooth(28.6, 30.4, k);
     const core = (0.9 + 1.1 * smooth(6, 30, k)) * (1 + 14 * easeIn(dive));
     const q = project(cam, [0, 0, 0]), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
     GL.frame({ name: "ch5_spiral", fs: SHADERS.ch5_spiral, scale: SC(0.55, 1.5),
       uniforms: { uTime: T, ...camUniforms(cam), uD: [Omega(k), omega(k) * SHUT, BETA, fin ? 1 : 0], uE: [armB, core, 1.8, 0.35 + 0.8 * smooth(8, 30, k) + 6 * dive] } },
       { bloom: 0.42 + 0.2 * smooth(12, 30, k), thresh: 1.2, exposure: 0.92 + 0.12 * smooth(8, 30, k) - 0.32 * card, rays: [rx, ry, 0.18 + 0.3 * smooth(10, 30, k) + 0.5 * dive],
-        letterbox: LB, vignette: 0.62, lift: 0.95 * Math.pow(dive, 2.2), fade: smooth(0, 1.4, k), t: T });
+        letterbox: LB, vignette: 0.62, lift: 0.95 * Math.pow(dive, 2.2), t: T });
     blit();
-    pic(() => drawEmbers(k, cam, (0.35 + 0.65 * smooth(4, 12, k)) * (1 - dive)));
+    pic(() => drawEmbers(k, cam, (0.55 + 0.75 * smooth(3, 12, k)) * (1 - dive)));
   }
 
+  window.CH5_SPIRAL = spiralFrame;                        // chapter IV ends on this same spiral (k < 0)
   // =====================================================================================================
   // B. THE STAIRCASE. Floating marble slabs (rise uA.x, run uA.y, half-width uA.z) climbing into light.
   // uB: x cloud-sea height, y -, z -, w -   uD: x light swell, y whiteout haze, z quality, w -
@@ -191,7 +192,9 @@ float fbm3(vec3 p){ return .5*noise(p)+.25*noise(p*2.03+vec3(1.7,9.2,3.1))+.125*
 vec3 sky(vec3 rd, vec3 L){
   float s=max(dot(rd,L),0.), sw=.5+uD.x;
   vec3 c=mix(vec3(.003,.003,.007), vec3(.009,.009,.017), smoothstep(-.4,.7,rd.y));
-  c+=stars(rd,.55*(1.-smoothstep(.75,.98,s))*(1.-clamp(uD.x*.3,0.,.9)));
+  float alt=smoothstep(15.,260.,uCamPos.y);                         // from a dusk sky on the ground to space
+  c=mix(c*vec3(3.2,2.6,2.2)+vec3(.02,.018,.022)*smoothstep(.3,-.1,rd.y), c, alt);
+  c+=stars(rd,(.2+1.1*alt)*(1.-smoothstep(.75,.98,s))*(1.-clamp(uD.x*.3,0.,.9)));
   c+=vec3(1.,.95,.86)*pow(s,6000.)*14.*sw + vec3(1.,.84,.6)*pow(s,600.)*1.1*sw + vec3(1.,.72,.45)*pow(s,70.)*.22*sw + vec3(.75,.5,.3)*pow(s,9.)*.035*sw;
   return c; }
 float softShadow(vec3 ro, vec3 rd){ float res=1., t=.03;
@@ -200,7 +203,7 @@ float softShadow(vec3 ro, vec3 rd){ float res=1., t=.03;
 // luminous mist that hangs around the staircase like a canyon of cloud, lit from the light above
 float mistDens(vec3 p){
   float dl=length(vec2(p.x, p.y-p.z*uA.x/uA.y+1.));
-  float m=smoothstep(2.6,7.,dl)*smoothstep(26.,12.,dl);
+  float m=smoothstep(2.6,7.,dl)*smoothstep(26.,12.,dl)*smoothstep(6.,30.,p.y);
   if(m<=0.) return 0.;
   float n=fbm3(p*vec3(.09,.16,.05)+vec3(0.,0.,uTime*.02));
   return m*smoothstep(.42,.72,n)*.35; }
@@ -210,10 +213,19 @@ void main(){
   vec3 L=normalize(vec3(0.,uA.x,uA.y));
   float s=max(dot(rd,L),0.);
   vec3 col=sky(rd,L);
-  int NS=uD.z>.5? 200 : 120; float t=.05, kk; bool hit=false;
-  for(int i=0;i<200;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=map(p,kk); if(d<.0007*t){ hit=true; break; } t+=d*.9; if(t>300.) break; }
+  int NS=uD.z>.5? 200 : 120; float t=.05, kk; bool hit=false, gnd=false;
+  for(int i=0;i<200;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=map(p,kk), dg=p.y+.32; if(dg<d){ d=dg; } if(d<.0007*t){ hit=true; gnd= dg<=d+1e-5; break; } t+=d*.9; if(t>2000.) break; }
+  if(!hit && rd.y<0.){ float tg=-(ro.y+.32)/rd.y; if(tg>0.){ hit=true; gnd=true; t=tg; } }
   vec3 sunC=vec3(1.,.86,.64)*(1.5+uD.x*1.4);
-  if(hit){ vec3 p=ro+rd*t; vec2 e=vec2(.0006*t+.0004,0.); float k2;
+  if(hit && gnd){ vec3 p=ro+rd*t;                                   // the stone plaza the staircase rises from
+    vec2 g=p.xz*.5; vec2 f=abs(fract(g)-.5); float joint=smoothstep(.47,.5,max(f.x,f.y));
+    float h=hash12(floor(g)); vec3 base=vec3(.5,.47,.42)*(.75+.25*h)*(1.-joint*.5)*(.85+.15*fbm3(vec3(p.xz*.7,1.)));
+    float sh=softShadow(p+vec3(0.,.01,0.),L);
+    vec3 c=base*(sunC*max(L.y,0.)*sh*.8+vec3(.03,.028,.035));
+    c+=vec3(1.,.72,.36)*.05*(1.+uD.x)*exp(-abs(p.x)*.5)*smoothstep(-6.,0.,-p.z+3.);
+    float fogA=1.-exp(-t*.004); c=mix(c, vec3(.03,.028,.035)+vec3(1.,.8,.55)*pow(s,6.)*.1, fogA);
+    col=c; }
+  else if(hit){ vec3 p=ro+rd*t; vec2 e=vec2(.0006*t+.0004,0.); float k2;
     vec3 n=normalize(vec3(map(p+e.xyy,k2)-map(p-e.xyy,k2), map(p+e.yxy,k2)-map(p-e.yxy,k2), map(p+e.yyx,k2)-map(p-e.yyx,k2)));
     vec3 q=p-vec3(0.,kk*uA.x,kk*uA.y);
     float hk=hash12(vec2(kk,3.7));
@@ -226,6 +238,7 @@ void main(){
     float dif=max(dot(n,L),0.)*sh;
     vec3 amb=vec3(.022,.021,.03)*(.6+.4*n.y)+vec3(.05,.035,.02)*max(-n.y,0.);
     vec3 c=base*(sunC*dif+amb);
+    c+=base*vec3(.16,.14,.12)*max(n.y,0.)*(1.-smoothstep(15.,260.,uCamPos.y));   // the dusk sky fills the treads near the ground
     if(n.y>.5){ vec3 rf=reflect(rd,n); c+=sky(rf,L)*.12*(.25+.75*sh); }
     float thin=exp(-(TH-q.y)/.04); c+=vec3(1.,.66,.36)*.16*(1.-max(n.y,0.))*thin*(.5+uD.x);
     float ex=uA.z-abs(q.x), ez=uA.y*.42-abs(q.z), ey=TH-q.y;
@@ -248,15 +261,16 @@ void main(){
   col=mix(col, vec3(1.,.88,.7)*(1.5+3.*uD.y), smoothstep(.2,1.,uD.y)*.7);
   fragColor=vec4(col,1.); }`;
 
-  const SR = 0.62, SRUN = 1.25, SWD = 1.7, KE = 160;      // same staircase proportions as chapter I
-  const FT = 6.0, FA = 18;                                 // flight: k(t) = K0 + FA (e^{(t-30)/FT} - 1)
-  const K0 = KE - 1.2 - FA * (Math.exp(8 / FT) - 1);       // the camera draws level with Einstein's step at 38 s
-  const kAt = t => K0 + FA * (Math.exp((t - 30) / FT) - 1);
-  const vAt = t => FA / FT * Math.exp((t - 30) / FT);
+  const SR = 0.62, SRUN = 1.25, SWD = 1.7, KE = 60;       // same staircase proportions as chapter I
+  // the climb starts on the ground, a few steps at walking pace, then ever faster: k(t) = -4 + V0 FT (e^{(t-30)/FT} - 1)
+  const V0 = 1.2, FT = 3.36;
+  const kAt = t => -4 + V0 * FT * (Math.exp((t - 30) / FT) - 1);
+  const vAt = t => V0 * Math.exp((t - 30) / FT);
   function stairCam(t) {
     const kc = kAt(t), sway = Math.sin(t * 0.37) * 0.25;
-    const pos = [2.35 + sway, kc * SR + 1.75, kc * SRUN];
-    const at = [0.15, (kc + 15) * SR + 0.9, (kc + 15) * SRUN];
+    const pos = [2.35 + sway, Math.max(kc * SR + 1.75, 1.45), kc * SRUN];
+    const ahead = 6 + 9 * smooth(30.5, 36, t);
+    const at = [0.15, Math.max((kc + ahead) * SR + 0.9 - 1.6 * (1 - smooth(30.5, 36, t)), 0.4), (kc + ahead) * SRUN];
     return look(pos, at, 1.25, -0.035 + 0.02 * Math.sin(t * 0.29));
   }
   // gold name plate on a step: hairline leader from the slab edge to the word
@@ -277,8 +291,8 @@ void main(){
     GL.frame({ name: "ch5_stairs", fs: SHADERS.ch5_stairs, scale: SC(0.55, 1.5),
       uniforms: { uTime: T, ...camUniforms(cam), uA: [SR, SRUN, SWD, 1], uD: [swell, haze, fin ? 1 : 0, 0], uV: vel } },
       { bloom: 0.5 + 0.4 * haze, thresh: 1.2, exposure: 1.0 + 0.5 * haze, rays: [fx / W, 1 - fy / H, 0.06 + 0.2 * smooth(38, 48, k)], letterbox: LB, vignette: 0.6 - 0.3 * haze,
-        lift: Math.max(0.9 * Math.pow(1 - smooth(30, 31.4, k), 1.5), Math.pow(smooth(45.5, 49.7, k), 1.6)), t: T });
-    blit();
+        lift: Math.pow(smooth(45.5, 49.7, k), 1.6), t: T });
+    o.save(); o.globalAlpha = smooth(29.0, 30.6, k); blit(); o.restore();
     zoomBlur(fx, fy, clamp(0.0022 * v, 0, 0.16) * (1 - haze * 0.5), fin ? 10 : 7);
     // Einstein's step: a gold name plate on the outer edge of one slab
     const anc = [SWD, KE * SR + 0.075, KE * SRUN - SRUN * 0.25], qa = project(cam, anc);
@@ -495,9 +509,9 @@ void main(){
     line("ASI", W / 2, H / 2, { size: 168, font: "Corm", color: STAR, spacing: 0.62 - 0.2 * ease(u), alpha: a * (0.9 + 0.1 * br), glow: 26 + 14 * br, blur: (1 - a) * 6 });
   }
   chapter("ch5", 70, (k, T) => {
-    if (k < 30) spiralFrame(k, T);
-    else if (k < 50) stairFrame(k, T);
-    else orbitFrame(k, T);
+    if (k < 30.6) spiralFrame(k, T);                       // the spiral dissolves into the foot of the staircase
+    if (k >= 29.0 && k < 50) stairFrame(k, T);
+    if (k >= 50) orbitFrame(k, T);
     chapterCard(k, "V", "폭발");
     asiTitle(k);
     captions(k);

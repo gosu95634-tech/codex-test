@@ -150,10 +150,11 @@ void main(){
       float ii=floor(ins+.5);
       float s=ii<.5? uB.x : (ii<1.5? uB.y : uB.z);
       vec2 tuv=vec2(u, (2.-ii+v/.86*.98+.01)/3.);
-      float m=texture(uTxt,tuv).r;
+      float vis=smoothstep(-.05,.3,s);                       // the year is not there until its step ignites
+      float m=texture(uTxt,tuv).r*vis;
       vec2 e=vec2(2./2048.,2./768.);
-      float mx=textureLod(uTxt,tuv+vec2(e.x,0.),1.).r-textureLod(uTxt,tuv-vec2(e.x,0.),1.).r;
-      float my=textureLod(uTxt,tuv+vec2(0.,e.y),1.).r-textureLod(uTxt,tuv-vec2(0.,e.y),1.).r;
+      float mx=(textureLod(uTxt,tuv+vec2(e.x,0.),1.).r-textureLod(uTxt,tuv-vec2(e.x,0.),1.).r)*vis;
+      float my=(textureLod(uTxt,tuv+vec2(0.,e.y),1.).r-textureLod(uTxt,tuv-vec2(0.,e.y),1.).r)*vis;
       n=normalize(n + (vec3(-1.,0.,0.)*mx + vec3(0.,1.,0.)*my)*1.1);
       float dc=abs(u-.5)*2.;
       float fr=s/.6;                                         // the molten front runs out from the centre
@@ -966,8 +967,8 @@ void main(){
   // burst: flash and a shock ring
   if(burst>0.){ float R=burst*.9+burst*burst*.15; float wR=.02+burst*.05;
     col+=vec3(1.,.82,.6)*exp(-pow((r-R)/wR,2.))*exp(-burst*.9)*6.;
-    col+=vec3(1.,.9,.75)*exp(-burst*2.2)*18./(1.+r*r*20.);
-    col+=gold*fil*exp(-burst*.6)*2.5*fall; }
+    col+=vec3(1.,.9,.75)*exp(-burst*6.)*4./(1.+r*r*30.);
+    col+=gold*fil*exp(-burst*.8)*1.2*fall; }
   fragColor=vec4(col,1.); }`;
   function drawFlow(k, T, extra = {}) { // k = chapter time, 69–83
     const s = k - 69, burst = k - 76;
@@ -978,12 +979,12 @@ void main(){
     const zoom = 1.0 + 0.35 * easeIO(clamp(s / 7)) + (burst > 0 ? -0.15 * (1 - Math.exp(-burst)) : 0);
     const rotA = 0.15 * s + (burst > 0 ? 0 : 0);
     const eps = burst > 0 ? 0.03 + 0.06 * (1 - Math.exp(-burst * 0.8)) : 0.05 * Math.pow(Math.max(76.02 - k, 0.002) / 7, 0.7) + 0.002;
-    const coreI = burst > 0 ? 3.0 + 8 * Math.exp(-burst * 1.2) : 0.6 + 2.0 * Math.pow(clamp((k - 69) / 7), 3);
+    const coreI = burst > 0 ? 1.6 + 4 * Math.exp(-burst * 2.5) : 0.6 + 2.0 * Math.pow(clamp((k - 69) / 7), 3);
     const lev = smooth(68.8, 70.2, k);
-    const lift = burst > 0 ? 0.55 * Math.exp(-burst * 2.2) : 0.05 * smooth(75.6, 76, k);
+    const lift = burst > 0 ? 0.12 * Math.exp(-burst * 6) : 0.05 * smooth(75.6, 76, k);
     GL.frame({ name: PRE + "flow", fs: FLOW, scale: SC(0.55, 1.5),
       uniforms: { uTime: T, uA: [zoom, rotA, tight, phase], uB: [coreI, eps, burst, 0], uC: [0, 0, 0.32, lev], uQ: Qf() } },
-    { bloom: 0.65 + (burst > 0 ? 0.4 * Math.exp(-burst) : 0), thresh: 1.0, exposure: 1.0 + (burst > 0 ? 0.6 * Math.exp(-burst * 0.7) : 0), rays: [0.5, 0.5, burst > 0 ? 0.55 * Math.exp(-burst * 0.4) : 0.15 * smooth(73, 76, k)], letterbox: LB, vignette: 0.6, t: T, lift: lift + (extra.lift ?? 0), fade: extra.fade ?? 1 });
+    { bloom: 0.65 + (burst > 0 ? 0.15 * Math.exp(-burst * 2) : 0), thresh: 1.0, exposure: 1.0 - (burst > 0 ? 0.25 * Math.exp(-burst * 1.5) : 0), rays: [0.5, 0.5, burst > 0 ? 0.35 * Math.exp(-burst * 1.2) : 0.15 * smooth(73, 76, k)], letterbox: LB, vignette: 0.6, t: T, lift: lift + (extra.lift ?? 0), fade: extra.fade ?? 1 });
     blit();
   }
 
@@ -1042,10 +1043,11 @@ void main(){ vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
     else if (k < 69.6) xfade(smooth(68.6, 69.6, k), () => drawOMR(k, T, { fade: 1 - smooth(68.6, 69.6, k) }), () => drawFlow(k, T));
     else if (k < 82.4) drawFlow(k, T);
     else if (k < 83.6) xfade(smooth(82.4, 83.6, k), () => drawFlow(k, T, { lift: 0.3 * smooth(82.4, 83.4, k) }), () => drawGateOpen(k, T));
-    else if (k < 97.2) drawGateOpen(k, T);
-    else if (k < 98.0) xfade(smooth(97.2, 98.0, k), () => drawGateOpen(k, T), () => drawSpiral(k, T));
-    else drawSpiral(k, T);
+    else if (k < 94.6) drawGateOpen(k, T);
+    else if (k < 96.4) xfade(smooth(94.6, 96.4, k), () => drawGateOpen(k, T), () => spiralNext(k, T));
+    else spiralNext(k, T);
   }
+  const spiralNext = (k, T) => window.CH5_SPIRAL ? window.CH5_SPIRAL(k - 102, T) : drawSpiral(k, T);
   function captions(k) {
     chapterCard(k, "IV", "문턱");
     caption(k, 8.8, 13.4, (a, u) => capB("2023 — 변호사 시험 상위 10%", a, u));
