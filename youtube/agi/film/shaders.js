@@ -119,8 +119,9 @@ bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, out vec3 ent, ou
 const SHADERS = {
   bright: `#version 300 es
 precision highp float; in vec2 vUv; out vec4 fragColor; uniform sampler2D uTex; uniform float uThresh;
+vec3 safe(vec3 c){ return any(isnan(c)) ? vec3(0) : min(c, vec3(1e4)); }   // a NaN must not bloom into a black block; Inf is just very bright
 void main(){ vec3 c=vec3(0); vec2 px=1./vec2(textureSize(uTex,0));
-  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) c+=texture(uTex,vUv+vec2(x,y)*px*1.5).rgb; c/=9.;
+  for(int y=-1;y<=1;y++) for(int x=-1;x<=1;x++) c+=safe(texture(uTex,vUv+vec2(x,y)*px*1.5).rgb); c/=9.;
   float l=max(c.r,max(c.g,c.b)); fragColor=vec4(c*smoothstep(uThresh, uThresh*2.2+0.4, l),1.); }`,
   blur: `#version 300 es
 precision highp float; in vec2 vUv; out vec4 fragColor; uniform sampler2D uTex; uniform vec2 uDir;
@@ -141,7 +142,9 @@ vec3 aces(vec3 x){ return clamp((x*(2.51*x+.03))/(x*(2.43*x+.59)+.14),0.,1.); }
 void main(){
   vec2 uv=vUv, c2=uv-.5; float r2=dot(c2,c2);
   vec3 col; col.r=texture(uScene,uv-c2*uCA*r2*4.).r; col.g=texture(uScene,uv).g; col.b=texture(uScene,uv+c2*uCA*r2*4.).b;
-  col+=texture(uBloomTex,uv).rgb*uBloom + texture(uRays,uv).rgb;
+  col=any(isnan(col)) ? vec3(0) : min(col, vec3(6e4));           // a value past half-float range is light, not darkness
+  vec3 add=texture(uBloomTex,uv).rgb*uBloom + texture(uRays,uv).rgb; add=any(isnan(add)) ? vec3(0) : min(add, vec3(6e4));
+  col+=add;
   col=aces(col*uExposure);
   col*=mix(1., smoothstep(1.05,.25,length(c2*vec2(1.,.8))), uVignette);
   col=pow(col, vec3(1./2.2));
@@ -322,7 +325,8 @@ float fbm2d(vec2 p, int oct){ float s=0., a=.5; for(int i=0;i<8;i++){ if(i>=oct)
 float terrainH(vec2 p, int oct){
   float d=length(p*vec2(1.,.8));
   float plain=smoothstep(1100., 3600., d);
-  return ridged(p*0.00048, oct)*1700.*plain + fbm2d(p*0.006, 3)*5.*(1.-plain*.6) - 2.; }
+  float lev=smoothstep(-.05, .12, 1.-length((p-vec2(0.,-420.))/vec2(1120.,700.)));   // the vigil stands on level ground
+  return ridged(p*0.00048, oct)*1700.*plain + mix(fbm2d(p*0.006, 3)*5.*(1.-plain*.6) - 2., (fbm2d(p*.02, 2)-.5)*.3, lev); }
 float sdCapsule(vec3 p, vec3 a, vec3 b, float r){ vec3 pa=p-a, ba=b-a; float h=clamp(dot(pa,ba)/dot(ba,ba),0.,1.); return length(pa-ba*h)-r; }
 // The crowd: an ellipse of people in front of the mountains (front row at z≈+20), all facing +z and looking up.
 const float CELL=1.0; const vec2 CRC=vec2(0.,-330.), CRR=vec2(900.,350.);
@@ -366,6 +370,40 @@ float mapG(vec3 p, float t, out int mat, out float tone){
   return dT; }
 vec3 personN(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=.003; float tn, pt;
   return normalize(k.xyy*person(p+k.xyy*h,tn,pt)+k.yyx*person(p+k.yyx*h,tn,pt)+k.yxy*person(p+k.yxy*h,tn,pt)+k.xxx*person(p+k.xxx*h,tn,pt)); }
+// A vigil: tens of thousands of candles held at chest height across the valley floor, each with the faint warm glow of
+// the face and hands above it. People are implied by their lights. uK: x amount, y ground light from candles.
+uniform vec4 uK;
+const float KC=1.3;
+float kMask(vec2 xz){ return 1.-length((xz-vec2(0.,-420.))/vec2(1050.,620.)); }
+vec3 candles(vec3 ro, vec3 rd, float tMax){
+  if(uK.x<=0.) return vec3(0);
+  float y0=.95, y1=1.85;
+  float ta, tb;
+  if(abs(rd.y)<1e-4){ if(ro.y<y0||ro.y>y1) return vec3(0); ta=0.; tb=tMax; }
+  else { float a=(y0-ro.y)/rd.y, b=(y1-ro.y)/rd.y; ta=max(min(a,b),0.); tb=min(max(a,b),tMax); }
+  if(tb<=ta) return vec3(0);
+  float pa=1./(uFov*uRes.y);
+  int NS=int(clamp(ceil((tb-ta)/KC),1.,28.));
+  vec3 acc=vec3(0); vec2 last=vec2(-1e9);
+  for(int s=0;s<28;s++){ if(s>=NS) break;
+    vec3 q=ro+rd*mix(ta,tb,(float(s)+.5)/float(NS));
+    vec2 b0=floor(q.xz/KC-.5);
+    for(int j=0;j<2;j++) for(int i=0;i<2;i++){ vec2 id=b0+vec2(i,j);
+      vec2 cc=(id+.5)*KC; float m=kMask(cc); if(m<=0.) continue;
+      float h1=hash12(id*1.7+3.1), h2=hash12(id*2.9+7.3), h3=hash12(id*.61+1.9);
+      if(h1>.62*smoothstep(0.,.06,m)) continue;
+      vec3 cp=vec3(cc.x+(h2-.5)*.8*KC, 1.05+.32*h3, cc.y+(fract(h3*7.3)-.5)*.8*KC);
+      float pw=.45+.75*fract(h2*5.1);
+      vec3 w=cp-ro; float tt=dot(w,rd); if(tt<=.3||tt>tMax) continue;
+      float th=length(w-rd*tt)/tt;
+      float fl=.8+.2*sin(uTime*(6.+h1*5.)+h2*40.)*sin(uTime*(2.3+h3*2.)+h1*9.);
+      float sc=max(.014/tt, .75*pa), far=pow(min(1., (.014/tt)/sc), 1.15);
+      acc+=vec3(1.,.62,.26)*fl*pw*(exp(-th*th/(2.*sc*sc))*3.5*far + exp(-th/(sc*7.))*.12*far);
+      vec3 fp=cp+vec3(0.,.36,.06); vec3 wf=fp-ro; float tf=dot(wf,rd);       // the face and hands above it, lit from below
+      if(tf>.3&&tf<tMax){ float tf2=length(wf-rd*tf)/tf, sf=max(.11/tf,.8*pa); acc+=vec3(.55,.3,.16)*fl*exp(-tf2*tf2/(2.*sf*sf))*.06*pow(min(1.,(.11/tf)/sf),.6); }
+    }
+  }
+  return acc*uK.x; }
 const vec3 PAL[6]=vec3[](vec3(.16,.07,.06), vec3(.2,.16,.11), vec3(.07,.08,.11), vec3(.11,.12,.09), vec3(.13,.125,.12), vec3(.3,.27,.23));
 vec3 terrainN(vec2 p, float t){ float e=.0012*t+.08; int oct=t<2200.?8:6;
   return normalize(vec3(terrainH(p-vec2(e,0),oct)-terrainH(p+vec2(e,0),oct), 2.*e, terrainH(p-vec2(0,e),oct)-terrainH(p+vec2(0,e),oct))); }
@@ -427,6 +465,7 @@ void main(){
       float snow=smoothstep(650.,1100.,p.y+n.y*120.)*smoothstep(.55,.85,n.y);
       vec3 alb=mix(vec3(.035,.032,.03), vec3(.55,.56,.6), snow);
       c=alb*(lightC*diff*sh*lightPool*.9 + vec3(.012,.018,.035)*(.5+.5*n.y));
+      if(uK.y>0.) c+=alb*vec3(1.,.58,.25)*uK.y*smoothstep(0.,.08,kMask(p.xz))*(.6+.4*noise(vec3(p.xz*.8,1.)));
     }
     float fogAmt=1.-exp(-tS*.00011); vec3 fogC=mix(vec3(.012,.017,.03), vec3(.35,.27,.17)*uA.z*.12, pow(max(dot(rd,gAx),0.),6.));
     c=mix(c, fogC, fogAmt);
@@ -434,6 +473,7 @@ void main(){
     col=c;
   } else if(entHit){ float haze=1.-exp(-tEnt*.000035*uB.w); col=mix(ent, vec3(.04,.05,.08)+ent*.55, haze); }
   col+=vec3(1.,.84,.6)*glowAcc*uA.z;
+  col+=candles(ro,rd,min(min(tS,tEnt),30000.));
   // cloud deck in front of whatever was hit
   vec2 sl=slab(ro,rd,uD.x,uD.y); float tMax=min(min(tS,tEnt),30000.);
   if(sl.x<sl.y && sl.x<tMax){ float ta=sl.x, tb=min(min(sl.y,tMax), ta+14000.); float L=tb-ta; float T=1.; vec3 cc=vec3(0);

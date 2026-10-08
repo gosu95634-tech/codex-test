@@ -1,8 +1,7 @@
 """Film score for 「인류의 마지막 발명」: 540 s, composed against the 음악 column of ../script.md.
 
-Two layers: an organ bed (the being, the cathedral) and an emotional layer of felt piano and a string section
-that follows what each scene feels - night and a single question, hope, winter, a match's pulse, the human move,
-dread at the sealed gate, turbulence, majesty, and tenderness at the end.
+One emotional arc runs through the whole film: the mix swells and rests with the story, and a string section
+doubles the organ's own chords and melodies only as the music rises.
 
 Every voice models an acoustic instrument in one synthetic cathedral:
 pipe-organ ranks (principal, stopped and harmonic flutes, salicional and voix celeste, open and
@@ -298,7 +297,7 @@ class Sec:
 
     def note(self, nt, at, dur, reg, gain, att=1.0, rel=1.5, pts=None, place="organ", spread=1.0, trem=0.0, chiff=1.0):
         f0, m = hz(nt), midi(nt)
-        gain *= getattr(self, "org", 1.0)
+        self.dub_note(nt, at, dur, reg, gain, att, rel, pts)
         for fam, foot, lvl in REG[reg]:
             mult = FOOT[foot]
             f = f0 * mult
@@ -690,6 +689,8 @@ def rise(S):
     # a high celeste halo (E, B, D, A) breathes in as the registration piles up
     S.chord(["E5", "B5"], 423.0, 32.1, "cel", 0.03, att=8.0, rel=0.3, pts=[(0, .6), (32, 1.4)])
     S.chord(["D6", "A6"], 435.0, 20.1, "cel", 0.02, att=6.0, rel=0.3, pts=[(0, .6), (20, 1.4)])
+    S.strc(["E2", "B2", "E3", "B3"], 397.0, 58.0, 0.09, att=8.0, rel=0.1, trem=0.4, pts=[(0, .35), (30, .7), (58, 1.2)])
+    S.strc(["E5", "B5"], 425.0, 30.0, 0.04, att=8.0, rel=0.1, trem=0.6, pts=[(0, .4), (30, 1.1)])
     mc, sigma = 69.0, 14.0      # spectral bell: centre A4, sigma ~1.2 octaves
     t, s = 397.0, 0
     while t < 454.9:
@@ -973,335 +974,45 @@ Sec.roll = _roll
 
 
 # ======================================================================================
-# the emotional layer: what each scene feels, played by piano and strings over the organ
+# the emotional arc: one intensity curve for the whole film (0 rest .. 1 peak). It shapes the whole mix, and the
+# string section joins the organ - same chords, same melody - only as the story rises, so rises really rise.
 # ======================================================================================
-def emo_cold_a(S):
-    # 0-14 the rise: the lowest strings breathe in beneath the organ; a high shimmer as we pass through the cloud
-    S.strc(["A1", "A2"], 3.0, 11.2, 0.16, att=6.0, rel=1.5, pts=[(0, .5), (11, 1.0)])
-    S.strc(["E5", "A5"], 6.0, 5.0, 0.045, att=2.0, rel=2.0, trem=0.6, bright=0.8)
-    S.strc(["E3", "A3", "C4"], 9.0, 5.4, 0.09, att=3.5, rel=1.4, pts=[(0, .6), (5.4, 1.0)])
-    # 14-19 it descends: the strings rise with it into F major, the cellos climbing
-    S.strc(["F3", "A3", "C4", "F4"], 14.0, 5.2, 0.11, att=2.5, rel=0.8, pts=[(0, .6), (5, 1.0)])
-    S.sline([("F2", 2.0), ("A2", 1.5), ("C3", 1.6)], 14.0, 0.3, solo=False, voices=4)
-    # 19-21.5 it searches for me: a held breath - a dissonant high tremolo, a heartbeat below
-    S.strc(["E5", "F5"], 19.0, 2.6, 0.06, att=0.6, rel=0.4, trem=0.8, bright=0.7)
-    for T in (19.2, 20.15, 21.05):
-        S.timp("F2", T, 0.2)
-        S.timp("F2", T + 0.28, 0.12)
-    # 21.5-27 the gaze locks: awe. The strings swell into F major 9 and the violins sing the spark an octave up
-    sw = [(0, .55), (3.0, .8), (5.4, 1.5)]
-    S.strc(["F2", "C3", "A3", "E4", "G4", "C5"], 21.5, 5.5, 0.12, att=1.0, rel=0.25, pts=sw)
-    S.str("F1", 21.5, 5.5, 0.14, att=1.5, rel=0.25, pts=sw)
-    S.sline([("A5", 1), ("E6", 1), ("D6", 1), ("C6", 2.4, {"pts": [(0, 1), (2.0, 1.5)], "rel": 0.25})], 22.0, 0.5, solo=False, voices=6)
-    S.roll("F2", 25.0, 26.95, 0.05, 0.35)
+ARC = [(0, .15), (14, .4), (21.5, .55), (26.9, 1.0), (27.4, .3), (34, .55), (40.4, 1.0), (44, .75), (47, .3),
+       (65, .3), (81, .5), (91, .65), (100.8, .95), (101.5, .45), (106.5, .7), (113, .3),
+       (133, .35), (147, .6), (158.5, .55), (160.5, .2), (177, .2), (183, .4), (186, .15), (189, .4), (195, 1.0), (199, .7), (203, .3),
+       (209, .3), (230.8, .8), (231.2, 1.0), (240, .8), (245, .35), (252.8, .4), (253.3, .9), (262, .6), (264, .25), (275, .35),
+       (289, .7), (298, 1.0), (303, .45),
+       (309, .4), (325, .65), (343, .55), (349.2, .75), (353, .5), (366.2, .85), (372, .7), (378.9, 1.0), (386, .8), (397, .9),
+       (397.5, .55), (454.9, .85), (455.1, 1.0), (465, 1.0), (466, .05), (469, .2), (475, .25),
+       (480, .35), (492, .6), (506, .9), (510.2, 1.0), (515, .7), (522, .4), (540, .1)]
+_AT, _AV = np.array([a for a, _ in ARC]), np.array([v for _, v in ARC])
 
 
-def emo_cold_b(S):
-    # 27.6 the people: a piano, human and close, under warm strings; a violin speaks for them
-    S.parp([(27.6, ["E2", "C3", "G3", "C4", "E4"]), (31.0, ["D2", "A2", "F3", "C4", "D4"]), (34.4, ["E2", "B2", "A3", "B3", "E4"]),
-            (37.5, ["E2", "B2", "G#3", "B3", "E4"])], 0.42, 0.32, end=40.4, pattern=(0, 2, 3, 4, 3, 1),
-           cresc=([27.6, 34.0, 40.4], [.8, 1.0, 1.4]))
-    for at, d, notes, g in [(27.6, 3.8, ["E3", "G3", "C4"], 0.08), (31.0, 3.8, ["D3", "F3", "A3", "C4"], 0.095),
-                            (34.4, 3.5, ["E3", "A3", "B3"], 0.11), (37.5, 3.0, ["E3", "G#3", "B3", "E4"], 0.13)]:
-        S.strc(notes, at, d, g, att=1.2, rel=0.4, pts=[(0, .9), (d, 1.25)])
-        S.str(notes[0][:-1] + str(int(notes[0][-1]) - 1), at, d, g, att=1.2, rel=0.4)
-    S.sline([("E5", 1.4), ("G5", 0.8), ("C6", 1.2), ("A5", 1.2), ("F5", 0.8), ("D5", 1.4), ("B5", 2.0), ("A5", 1.1),
-             ("G#5", 3.0, {"pts": [(0, .9), (3.0, 1.5)]})], 28.2, 0.42)
-    S.roll("E2", 38.6, 40.45, 0.05, 0.45)
-    # 40.5 the title: strings in A major, a broad piano chord, then the spark in major on the piano
-    S.strc(["A2", "E3", "A3", "C#4", "E4", "A4", "C#5"], 40.5, 5.6, 0.1, att=0.5, rel=2.4, pts=[(0, 1), (5.6, .6)])
-    S.str("A1", 40.5, 5.6, 0.12, att=0.5, rel=2.4)
-    S.timp("A2", 40.5, 0.4)
-    S.pchord(["A1", "E2", "A2", "C#3", "E3", "A3", "C#4", "E4"], 40.5, 0.5, 5.5, roll=0.03)
-    S.pline([("A4", 0.8), ("E5", 0.8), ("D5", 0.8), ("C#5", 2.6)], 42.6, 0.34, pedal=2.6)
+def arc(t):
+    return np.interp(t, _AT, _AV)
 
 
-def emo_ch1(S):
-    S.strc(["A3", "E4"], 47.5, 5.5, 0.05, att=2.5, rel=1.5)
-    # 53-65 the knight: clever but small - a dry plucked bass and little staccato piano figures
-    S.pline([("A2", 1), ("E2", 1)] * 6, 53.0, 0.3, pedal=0.14)
-    for at, fig in [(55.0, ["A5", "C6", "E6"]), (57.0, ["G5", "B5", "D6"]), (59.0, ["A5", "C6", "E6", "A6"]),
-                    (61.0, ["F5", "A5", "C6"]), (63.0, ["E5", "G#5", "B5", "E6"])]:
-        S.pline([(n, 0.25) for n in fig], at, 0.27, pedal=0.12)
-    # 65-81 the armillary (AGI): wonder - flowing piano, warm strings, a violin melody that opens up
-    S.parp([(65.0, ["A2", "E3", "A3", "C4", "E4"]), (70.5, ["F2", "C3", "F3", "A3", "C4"]), (76.0, ["C3", "G3", "C4", "E4", "G4"])],
-           0.3, 0.27, end=81.0, pattern=(0, 1, 2, 3, 4, 3, 2, 1))
-    S.sprog([(65.0, ["A3", "C4", "E4"]), (70.5, ["F3", "A3", "C4"]), (76.0, ["G3", "C4", "E4"])], 81.2, 0.09, att=1.8, rel=1.0)
-    S.sline([("E5", 2), ("D5", 1), ("C5", 1), ("A4", 1.5), (None, 0.3), ("F5", 2), ("E5", 1), ("C5", 1), ("D5", 1.5), (None, 0.3),
-             ("G5", 2), ("E5", 1), ("C6", 1.6)], 65.2, 0.4)
-    # 81-91 the staircase: each step a stair higher and a little louder
-    for i, (at, notes) in enumerate([(81.0, ["A2", "E3", "A3", "C4"]), (83.5, ["B2", "G3", "B3", "D4"]), (86.0, ["C3", "G3", "C4", "E4"]),
-                                     (88.5, ["D3", "A3", "D4", "F4"])]):
-        S.pchord(notes, at, 0.3 + 0.06 * i, 2.5, roll=0.02)
-        S.strc(notes[1:], at, 2.6, 0.075 + 0.018 * i, att=0.4, rel=0.6)
-    S.sline([("A4", 2.5), ("B4", 2.5), ("C5", 2.5), ("D5", 2.5)], 81.0, 0.38)
-    # 91-101 looking up into ASI: awe and dread - a high tremolo cluster grows over the basses' long E, a roll
-    S.strc(["B4", "E5", "A5", "B5"], 91.0, 10.0, 0.055, att=4.0, rel=1.0, trem=0.7, pts=[(0, .5), (9.8, 1.4)])
-    S.strc(["E1", "E2"], 91.0, 10.0, 0.18, att=3.0, rel=0.8, pts=[(0, .6), (9.8, 1.2)])
-    S.roll("E2", 96.5, 100.95, 0.03, 0.25)
-    # 101-113 three lights: the spark alone on the piano; at "the second step" C major blooms
-    S.pchord(["A2", "E3", "A3"], 101.0, 0.28, 5.4)
-    S.pline([("A4", 1), ("E5", 1), ("D5", 1), ("C5", 2.5)], 101.2, 0.4, pedal=2.4)
-    S.pchord(["C2", "G2", "C3", "E3", "G3", "C4", "E4"], 106.5, 0.45, 6.0, roll=0.04)
-    S.strc(["C3", "G3", "C4", "E4", "G4"], 106.5, 6.2, 0.1, att=1.0, rel=2.0, pts=[(0, 1), (6, .5)])
-    S.sline([("E5", 2), ("G5", 1.5), ("C6", 2.4, {"pts": [(0, 1), (2.4, .6)]})], 106.8, 0.36)
+# organ registration -> (string role, level relative to the organ note)
+DUB = {"cel": ("pad", 2.4), "aether": ("pad", 2.0), "chorus": ("pad", 1.6), "plenum": ("pad", 1.4), "plenum_soft": ("pad", 1.6),
+       "prin": ("pad", 1.8), "dark": ("pad", 2.2), "fl84": ("pad", 1.5), "spr": ("mel", 3.0), "hfl": ("mel", 3.4),
+       "ped": ("bass", 1.6), "ped_open": ("bass", 1.4), "ped_mel": ("bass", 1.6), "ped_tutti": ("bass", 1.2)}
 
 
-def emo_ch2(S):
-    S.pchord(["A1", "E2", "A2"], 113.5, 0.24, 5.5)
-    # 119-133 Turing at night: the flute asks; a piano answers with slow broken chords, close and human
-    S.parp([(119.0, ["A2", "E3", "A3", "C4"]), (122.5, ["F2", "C3", "A3", "C4"]), (126.0, ["C3", "G3", "C4", "E4"]),
-            (129.5, ["G2", "D3", "G3", "B3"])], 0.58, 0.25, end=133.0, pattern=(0, 1, 2, 3, 2, 1))
-    S.str("A2", 119.0, 14.0, 0.06, att=4.0, rel=1.5)
-    # 133-147 Dartmouth: optimism - rolling piano, the strings lift, a rising violin line
-    S.parp([(133.0, ["A2", "E3", "A3", "B3", "C4", "E4"]), (136.5, ["F2", "C3", "F3", "G3", "A3", "C4"]),
-            (140.0, ["E2", "C3", "E3", "G3", "C4", "E4"]), (143.5, ["G2", "D3", "G3", "B3", "D4", "G4"])], 0.29, 0.32, end=147.0,
-           pattern=(0, 2, 4, 5, 3, 1), cresc=([133, 147], [.85, 1.15]))
-    S.sprog([(133.0, ["A3", "C4", "E4"]), (136.5, ["F3", "A3", "C4"]), (140.0, ["G3", "C4", "E4"]), (143.5, ["G3", "B3", "D4"])],
-            147.2, 0.095, att=1.2, rel=1.0)
-    S.sline([("E5", 1.5), ("F5", 0.75), ("G5", 0.75), ("A5", 2.5), ("G5", 1), ("E5", 0.75), ("G5", 0.75), ("C6", 2), ("B5", 1),
-             ("A5", 0.5), ("B5", 0.5), ("D6", 2.4)], 133.5, 0.42)
-    # 147-159 the perceptron: hope - strings warm under the arpeggios, a violin answers each chord
-    S.sprog([(147.0, ["C3", "G3", "C4", "E4"]), (150.0, ["B2", "G3", "B3", "D4"]), (153.0, ["A2", "E3", "A3", "C4"]),
-             (156.0, ["F2", "C3", "A3", "C4"])], 159.3, 0.1, att=1.2, rel=1.2, bass=False)
-    S.sline([("G5", 2.2), ("E5", 0.8), ("D5", 2.2), ("B4", 0.8), ("C5", 2.2), ("E5", 0.8), ("A5", 2.6)], 147.3, 0.4)
-    # 159-177 winter: the organ is gone. A piano alone, slow and cold; a cello remembers; a far, frozen drone
-    S.pline([("E5", 2.5), (None, 1.0), ("D5", 1.0), ("C5", 2.5), (None, 1.5), ("B4", 3.0), (None, 1.0), ("A4", 4.5)], 159.4, 0.3, pedal=3.0)
-    S.pline([(["A2", "E3"], 6.0), (["F2", "C3"], 6.0), (["E2", "B2"], 6.0)], 159.0, 0.17, pedal=6.0)
-    S.sline([("A3", 3), ("G3", 2), ("F3", 3), ("E3", 4)], 165.0, 0.3, vib=0.8)
-    S.str("A1", 160.0, 16.5, 0.05, att=5.0, rel=2.0, trem=0.3, bright=0.6)
-    # 177-189 Deep Blue: a clock-like pulse tightens under a dissonant tremolo; the king falls at 183.0
-    t, iv = 177.0, 1.0
-    while t < 182.9:
-        u = (t - 177.0) / 6.0
-        S.piano("A1", t, 0.2 + 0.2 * u, 0.4)
-        S.piano("A2", t, 0.14 + 0.15 * u, 0.4)
-        t += iv
-        iv = max(0.42, iv * 0.86)
-    S.strc(["E4", "F4"], 177.2, 5.8, 0.06, att=2.5, rel=0.15, trem=0.8, pts=[(0, .5), (5.8, 1.4)])
-    S.timp("A2", 183.0, 0.4)
-    S.pchord(["A0", "E1", "A1"], 183.0, 0.38, 2.5)
-    S.strc(["A1", "A2"], 183.0, 3.4, 0.13, att=0.08, rel=2.0)
-    S.strc(["D3", "F3", "A3"], 184.6, 4.6, 0.045, att=2.0, rel=1.4)
-    # 189-203 the thaw, rebirth: the strings swell, the piano flows, violins soar over the flute; peak at 195
-    S.parp([(189.0, ["F2", "C3", "F3", "A3", "C4"]), (191.5, ["E2", "C3", "E3", "G3", "C4"]), (193.5, ["G2", "D3", "G3", "B3", "D4"]),
-            (195.0, ["A2", "E3", "A3", "C4", "E4"]), (199.0, ["F2", "C3", "F3", "A3", "C4"])], 0.2, 0.3, end=202.6,
-           pattern=(0, 1, 2, 3, 4, 3, 2, 1), cresc=([189, 195, 199, 202.6], [.8, 1.25, .9, .6]))
-    for at, d, notes, g in [(189.0, 2.9, ["F3", "A3", "C4", "F4"], 0.1), (191.5, 2.4, ["E3", "G3", "C4", "E4"], 0.12),
-                            (193.5, 1.9, ["G3", "B3", "D4", "G4"], 0.15), (195.0, 4.4, ["A3", "C4", "E4", "A4"], 0.19),
-                            (199.0, 4.0, ["F3", "A3", "C4", "F4"], 0.1)]:
-        S.strc(notes, at, d, g, att=0.9, rel=1.2)
-        S.str(notes[0][:-1] + str(int(notes[0][-1]) - 1), at, d, g, att=0.9, rel=1.2)
-    S.sline([("C6", 2.2), ("E6", 1.0), ("D6", 1.3), ("G6", 1.5), ("E6", 3.0), ("D6", 1.0), ("C6", 2.6)], 189.3, 0.48, solo=False, voices=6)
-    S.timp("A2", 195.0, 0.3)
+def _dub(self, nt, at, dur, reg, gain, att, rel, pts):
+    """The strings double an organ note, as loud as the arc allows at that moment."""
+    if not getattr(self, "dub", True) or reg not in DUB or dur < 0.8:
+        return
+    a = float(arc(at + min(dur, 4.0) * 0.5))
+    if a <= 0.25:
+        return
+    role, k = DUB[reg]
+    g = gain * k * ((a - 0.25) / 0.75) ** 1.4
+    if role == "bass":                         # the 16' sounds an octave below: cellos and basses there
+        nt = nt[:-1] + str(int(nt[-1]) - 1)
+    self.str(nt, at, dur, g, att=max(att, 0.35), rel=max(rel, 0.4), pts=pts, voices=6 if role == "mel" else 4)
 
 
-def emo_ch3(S):
-    S.strc(["A2", "E3"], 203.5, 5.8, 0.05, att=2.5, rel=1.5)
-    # 209-223 the match: tension - a clock-like piano pulse, a soft drum, tremolo strings holding their breath
-    t, k = 209.0, 0
-    while t < 222.95:
-        S.piano("A2" if k % 2 == 0 else "E3", t, 0.18 + 0.1 * (t - 209) / 14, 0.3)
-        t += 0.5
-        k += 1
-    for T in np.arange(209.0, 223.0, 2.0):
-        S.timp("A2", float(T), 0.12)
-    S.strc(["A3", "E4"], 209.0, 14.0, 0.05, att=3.0, rel=0.8, trem=0.6)
-    # 223-231 game 2 rushes by: the pulse doubles and climbs; a chromatic tremolo rises; a roll into the move
-    t, k = 223.0, 0
-    while t < 230.95:
-        u = (t - 223.0) / 8.0
-        S.piano(["A2", "E3", "A3", "E3"][k % 4], t, 0.26 + 0.25 * u, 0.2)
-        t += 0.25
-        k += 1
-    S.sline([("E4", 2), ("F4", 2), ("F#4", 2), ("G4", 2.0)], 223.0, 0.09, solo=False, voices=5, trem=0.8)
-    S.roll("A2", 229.0, 230.95, 0.05, 0.32)
-    # 231.0 move 37: awe - strings burst open with the organ, a timpani stroke; a broad melody: centuries overturned
-    S.timp("F2", 231.0, 0.65)
-    S.sprog([(231.0, ["F2", "C3", "A3", "E4", "B4"])], 235.8, 0.23, att=0.2, rel=1.2)
-    S.sprog([(235.5, ["G2", "D3", "B3", "D4", "G4"]), (240.0, ["F2", "C3", "A3", "C4", "E4"]),
-             (243.0, ["C3", "G3", "C4", "E4", "G4"])], 245.0, 0.13, att=0.6, rel=1.2)
-    S.sline([("C6", 2), ("B5", 1), ("G5", 1), ("A5", 3.0), (None, 0.5), ("G5", 1.5), ("A5", 0.5), ("B5", 1), ("C6", 2), ("E6", 1.6)],
-            231.4, 0.48, solo=False, voices=6)
-    # 245-253 three wins: sorrow - the piano alone, minor, slow; then a held breath before the human move
-    S.pline([("E5", 1.2), ("D5", 1.0), ("C5", 1.3), ("B4", 0.5), ("A4", 1.5), ("F4", 1.0), ("E4", 0.9)], 245.2, 0.28, pedal=1.8)
-    S.pline([(["A2", "E3"], 3.5), (["D2", "A2"], 2.5), (["E2", "B2"], 2.0)], 245.0, 0.17, pedal=3.0)
-    # 253.0 move 78: the most human moment - a solo violin sings in A major over piano and strings
-    S.pchord(["A1", "E2", "A2", "C#3", "E3"], 253.0, 0.4, 4.0, roll=0.05)
-    S.parp([(253.0, ["A2", "E3", "A3", "C#4", "E4"]), (257.0, ["D2", "A2", "D3", "F#3", "A3"]), (260.0, ["A2", "E3", "A3", "C#4", "E4"])],
-           0.4, 0.25, end=263.0)
-    S.sprog([(253.0, ["A3", "C#4", "E4"]), (257.0, ["D3", "F#3", "A3", "D4"]), (260.0, ["A3", "C#4", "E4"])], 263.5, 0.1, att=0.8, rel=2.0)
-    S.sline([("C#6", 2), ("B5", 1), ("A5", 1.5), (None, 0.3), ("F#5", 0.7), ("A5", 0.8), ("D6", 1.7), ("C#6", 1.5), ("B5", 0.8),
-             ("A5", 0.7), ("E5", 1.5)], 253.2, 0.6)
-    # 263-275 4 : 1 - melancholy: a cello alone under the held flute, a few piano chords
-    S.sline([("E3", 3), ("D3", 1), ("C3", 2), ("B2", 2), ("A2", 3.5)], 264.0, 0.32, vib=0.9)
-    S.pline([(["A2", "C3", "E3"], 4), (["F2", "A2", "C3"], 4), (["E2", "G#2", "B2"], 3.5)], 263.5, 0.17, pedal=4.0)
-    # 275-289 the transformer: momentum - piano eighths drive under the flute, the strings pulse, a drum marks each chord
-    chords = [(275.0, ["A1", "A2", "E3", "A3", "C4"]), (278.5, ["F1", "F2", "C3", "F3", "A3"]), (282.0, ["C2", "C3", "G3", "C4", "E4"]),
-              (285.5, ["G1", "G2", "D3", "G3", "B3"]), (289.0, None)]
-    for i in range(4):
-        at, notes = chords[i]
-        nxt = chords[i + 1][0]
-        S.timp(notes[1], at, 0.15 + 0.04 * i)
-        t, k = at, 0
-        while t < nxt - 1e-6:
-            u = (t - 275.0) / 14.0
-            S.piano(notes[[1, 2, 3, 2, 4, 2, 3, 2][k % 8]], t, 0.22 + 0.14 * u, 0.24)
-            if k % 2 == 0:
-                S.strc(notes[2:], t, 0.36, 0.035 + 0.035 * u, att=0.03, rel=0.18, voices=4)
-            t += 0.25
-            k += 1
-    # 289-303 light across the world: release and wonder - big warm strings, a soaring violin melody, high piano sparkle
-    S.sprog([(289.0, ["F2", "C3", "A3", "C4", "G4"]), (293.5, ["E2", "C3", "G3", "C4", "E4"]), (298.0, ["G2", "D3", "G3", "C4", "D4"])],
-            302.8, 0.13, att=1.2, rel=1.5)
-    S.sline([("A5", 2), ("C6", 1), ("G5", 1.5), ("E6", 3.0), ("D6", 1.5), ("C6", 1.5), ("D6", 3.0)], 289.3, 0.48, solo=False, voices=6)
-    S.parp([(289.0, ["F4", "A4", "C5", "G5"]), (293.5, ["E4", "G4", "C5", "E5"]), (298.0, ["D4", "G4", "C5", "D5"])], 0.25, 0.19,
-           end=302.5, pattern=(0, 1, 2, 3, 2, 1))
-
-
-def emo_ch4(S):
-    S.str("A1", 303.0, 6.0, 0.1, att=2.5, rel=1.0)
-    # 309-325 montage: driving eighths, a drum on every step, the violins climbing
-    t, k = 309.0, 0
-    while t < 324.9:
-        bass = ("A2", "E3") if t < 312 else ("F2", "C3") if t < 317 else ("G2", "D3") if t < 322 else ("A2", "E3")
-        S.piano(bass[k % 2], t, 0.24 + 0.16 * (t - 309) / 16, 0.22)
-        t += 0.3
-        k += 1
-    for at, nt in [(312.0, "F2"), (317.0, "G2"), (322.0, "A2")]:
-        S.timp(nt, at, 0.35)
-    S.sprog([(312.0, ["F3", "A3", "C4"]), (317.0, ["G3", "B3", "D4"]), (322.0, ["A3", "C4", "E4", "A4"])], 325.2, 0.11, att=0.25, rel=0.6)
-    S.sline([("C6", 5), ("D6", 5), ("E6", 3.2)], 312.0, 0.38, solo=False, voices=5)
-    # 325-343 the sealed gate: dread - a low tremolo cluster, the cellos sink by semitones, the piano's lowest notes
-    S.strc(["A1", "A2", "Bb2"], 325.0, 18.0, 0.065, att=4.0, rel=1.5, trem=0.7, pts=[(0, .6), (18, 1.0)])
-    S.sline([("A2", 4.5), ("G#2", 4.5), ("G2", 4.5), ("F#2", 4.5)], 325.0, 0.28, solo=False, voices=4, vib=0.5)
-    for at in (325.5, 331.5, 337.5):
-        S.pchord(["A0", "A1"], at, 0.3, 5.0)
-    S.roll("A2", 339.0, 342.95, 0.03, 0.18)
-    # 343-353 Erdos: mystery tightening, then the disproof at 349: a struck chord of light
-    S.strc(["D4", "F4", "A4"], 343.0, 3.1, 0.065, att=1.0, rel=0.3, trem=0.5)
-    S.strc(["E4", "G#4", "B4", "D5"], 346.0, 3.0, 0.075, att=0.8, rel=0.2, trem=0.7, pts=[(0, .7), (3, 1.4)])
-    S.timp("A2", 349.0, 0.3)
-    S.sprog([(349.0, ["A2", "E3", "A3", "C4", "E4"])], 353.2, 0.08, att=0.1, rel=1.5)
-    S.pchord(["A2", "E3", "A3", "C4", "E4", "A4"], 349.0, 0.34, 4.0, roll=0.02)
-    # 353-363 ten stars: wonder - each star also rings on the piano; then all ten blaze with the strings
-    for at, nt in zip(TEN_STARS, ["E5", "G5", "A5", "C6", "D6", "E6", "G6", "A6", "C7", "D7"]):
-        S.piano(nt, at, 0.3, 1.5)
-    S.strc(["A4", "E5"], 353.5, 7.0, 0.035, att=3.0, rel=1.0, trem=0.4)
-    S.sprog([(360.5, ["F3", "C4", "A4", "E5", "G5"])], 365.8, 0.12, att=0.3, rel=1.5)
-    S.pchord(["F2", "C3", "F3", "A3", "C4", "E4", "G4"], 360.5, 0.48, 5.0, roll=0.03)
-    # 363-372 「450」: joy - D major sweeps up the piano, the strings shine
-    S.pline([(n, 0.12) for n in ["D3", "F#3", "A3", "D4", "F#4", "A4", "D5", "F#5", "A5"]], 364.9, 0.4, pedal=6.0)
-    S.sprog([(366.0, ["D3", "A3", "D4", "F#4", "A4", "D5"])], 371.8, 0.14, att=0.2, rel=1.5)
-    S.sline([("F#6", 1.5), ("E6", 0.75), ("D6", 0.75), ("A6", 2.6)], 366.2, 0.42, solo=False, voices=6)
-    S.timp("D3", 366.0, 0.3)
-    # 372-379 Navier-Stokes: turbulence - whirling string figures, a piano tremolo in the bass, a roll to the burst
-    swirl = ["G4", "A4", "B4", "D5", "C5", "B4", "A4", "F#4"]
-    t, k = 372.0, 0
-    while t < 378.9:
-        u = (t - 372.0) / 7.0
-        nt = swirl[k % 8]
-        if u > 0.5:
-            nt = nt[:-1] + str(int(nt[-1]) + 1)
-        S.str(nt, t, 0.24, 0.05 + 0.07 * u, att=0.03, rel=0.12, voices=4, vib=0.3)
-        t += 0.24 * (0.5 ** u)
-        k += 1
-    t, k = 375.0, 0
-    while t < 378.95:
-        S.piano("G1" if k % 2 == 0 else "G2", t, 0.2 + 0.3 * (t - 375) / 4, 0.12)
-        t += 0.1
-        k += 1
-    S.roll("G2", 375.0, 378.95, 0.04, 0.42)
-    # 379.0 the blow-up: everything opens on C - the chapter's peak
-    S.timp("C3", 379.0, 0.6)
-    S.strc(["C2", "G2", "C3", "E3", "G3", "C4", "E4", "G4", "C5"], 379.0, 7.0, 0.09, att=0.15, rel=1.0, pts=[(0, 1), (7, .6)])
-    S.pchord(["C1", "G1", "C2", "G2", "C3", "E3", "G3", "C4"], 379.0, 0.55, 6.0, roll=0.015)
-    S.sline([("E6", 2), ("G6", 1), ("C7", 3.5)], 379.2, 0.5, solo=False, voices=6)
-    # 386-397 the doors: majestic - strings and timpani climb F, C/E, Dm7, Esus4 under a noble violin line
-    doors = [(386.0, ["F2", "C3", "A3", "C4", "F4"]), (389.0, ["E2", "C3", "G3", "C4", "E4"]), (391.5, ["D2", "A2", "F3", "C4", "D4"]),
-             (394.0, ["E2", "B2", "A3", "B3", "E4"])]
-    for i, (at, notes) in enumerate(doors):
-        nxt = doors[i + 1][0] if i + 1 < len(doors) else 397.2
-        S.strc(notes, at, nxt - at + 0.4, 0.1 + 0.02 * i, att=0.6, rel=0.8)
-        S.timp(notes[0], at, 0.25 + 0.07 * i)
-        S.pchord(notes, at, 0.35 + 0.05 * i, nxt - at, roll=0.02)
-    S.sline([("A5", 2.0), ("G5", 1.0), ("E5", 2.5), ("F5", 1.0), ("A5", 1.5), ("B5", 3.2)], 386.0, 0.48, solo=False, voices=6)
-
-
-def emo_rise(S):
-    # the rise: string tremolo piling up, a pulse that quickens, a roll that never stops growing
-    S.strc(["E2", "B2", "E3"], 397.0, 58.0, 0.07, att=6.0, rel=0.1, trem=0.5, pts=[(0, .5), (40, 1.0), (58, 1.15)])
-    S.strc(["E5", "B5"], 420.0, 35.0, 0.035, att=6.0, rel=0.1, trem=0.8, pts=[(0, .4), (35, 1.1)])
-    t, iv = 397.0, 1.0
-    while t < 445.0:
-        u = (t - 397.0) / 48.0
-        S.timp("E2", t, 0.07 + 0.15 * u)
-        S.piano("E1", t, 0.16 + 0.22 * u, 0.3)
-        t += iv
-        iv = max(0.25, iv * 0.965)
-    S.roll("E2", 445.0, 454.95, 0.1, 0.32)
-
-
-def emo_climax(S):
-    S.timp("F2", 455.0, 0.9)
-    S.strc(["F2", "C3", "F3", "A3", "C4", "F4", "A4", "C5", "F5"], 455.0, 10.2, 0.2, att=0.12, rel=0.25)
-    S.str("F1", 455.0, 10.2, 0.22, att=0.12, rel=0.25)
-    S.pchord(["F1", "C2", "F2", "A2", "C3", "F3"], 455.0, 0.85, 9.5, roll=0.01)
-    S.sline([("A5", 2.5), ("C6", 2.0), ("F6", 5.5)], 455.5, 0.65, solo=False, voices=6)
-
-
-def emo_coda(S):
-    # 469-475 its eyes look at us: a cello on the lowest A, one high violin harmonic
-    S.str("A1", 469.0, 6.5, 0.12, att=2.0, rel=2.0)
-    S.str("E6", 469.3, 6.0, 0.025, att=2.5, rel=2.0, trem=0.25, bright=0.7)
-
-
-def emo_ch6(S):
-    # 475-480 hope: the piano plays the spark in major, gently
-    S.pchord(["A2", "E3", "A3"], 475.2, 0.24, 4.5)
-    S.pline([("A4", 1), ("E5", 1), ("D5", 1), ("C#5", 2.4)], 478.0, 0.36, pedal=2.0)
-    # 480-492 two pillars: a violin and a cello in dialogue, strings beneath, piano arpeggios
-    S.parp([(481.0, ["A2", "E3", "A3", "C#4"]), (483.5, ["F#2", "C#3", "F#3", "A3"]), (486.5, ["D2", "A2", "D3", "F#3"]),
-            (489.0, ["E2", "B2", "E3", "G#3"])], 0.4, 0.23, end=492.0)
-    S.sprog([(481.0, ["A3", "C#4", "E4"]), (483.5, ["F#3", "A3", "C#4"]), (486.5, ["F#3", "A3", "D4"]), (489.0, ["G#3", "B3", "E4"])],
-            492.2, 0.075, att=1.2, rel=1.0, bass=False)
-    S.sline([("E5", 1), ("D5", 1), ("C#5", 1.6)], 481.0, 0.4)
-    S.sline([("A3", 1), ("B3", 1), ("C#4", 1.6)], 483.8, 0.36, vib=0.9)
-    S.sline([("F#5", 1), ("E5", 1), ("D5", 1.6)], 486.5, 0.42)
-    S.sline([("B3", 1), ("C#4", 1), ("D4", 0.6), ("E4", 1.6)], 489.0, 0.4, vib=0.9)
-    # 492-506 contact: the spark in major swells in the strings, the piano flows
-    prog6 = [(492.5, ["A2", "E3", "A3", "C#4"]), (493.5, ["G#2", "E3", "B3", "E4"]), (494.5, ["F#2", "D3", "A3", "D4"]),
-             (495.5, ["E2", "A3", "C#4", "E4"]), (497.5, ["D2", "A2", "F#3", "C#4"]), (499.5, ["B1", "F#2", "A3", "D4"]),
-             (500.5, ["C#2", "G#2", "C#3", "E4"]), (501.5, ["D2", "A2", "F#3", "D4"]), (502.5, ["E2", "B2", "A3", "E4"])]
-    S.parp(prog6, 0.25, 0.28, end=506.0, pattern=(0, 1, 2, 3, 2, 1), cresc=([492.5, 506.0], [.8, 1.3]))
-    for i, (at, notes) in enumerate(prog6):
-        nxt = prog6[i + 1][0] if i + 1 < len(prog6) else 506.2
-        S.strc(notes[1:], at, nxt - at + 0.3, 0.08 + 0.006 * i, att=0.6, rel=0.6)
-        S.str(notes[0], at, nxt - at + 0.3, 0.09 + 0.006 * i, att=0.6, rel=0.6)
-    S.sline([("A5", 1), ("E6", 1), ("D6", 1), ("C#6", 2), ("B5", 1), ("C#6", 1), ("D6", 1), ("E6", 3.5)], 492.5, 0.5, solo=False, voices=6)
-    # 506-510 the great swell into the end
-    S.strc(["E2", "B2", "E3", "A3", "B3", "E4", "A4", "B4"], 506.0, 2.0, 0.11, att=1.0, rel=0.3)
-    S.strc(["E2", "B2", "E3", "G#3", "B3", "E4", "G#4", "B4", "E5"], 508.0, 2.05, 0.13, att=0.4, rel=0.3, pts=[(0, 1), (2, 1.4)])
-    S.roll("E2", 506.5, 509.95, 0.05, 0.4)
-
-
-def emo_end(S):
-    # 510: peace. Strings in A major, a broad piano chord, then a quiet piano melody over a plagal amen
-    S.timp("A2", 510.0, 0.35)
-    S.sprog([(510.0, ["A2", "E3", "A3", "C#4", "E4", "A4"]), (515.0, ["D3", "A3", "D4", "F#4"]), (518.0, ["A2", "E3", "A3", "C#4", "E4"])],
-            522.5, 0.1, att=0.4, rel=3.0)
-    S.pchord(["A1", "E2", "A2", "C#3", "E3", "A3", "C#4", "E4"], 510.0, 0.48, 5.0, roll=0.035)
-    S.pline([("E5", 1.5), ("C#5", 1.0), ("B4", 1.0), ("A4", 2.0), ("F#4", 1.5), ("A4", 1.0), ("E4", 3.5)], 512.0, 0.3, pedal=2.0)
-    # 522-540: the spark once more on the piano with the music box; the strings fade
-    S.pline([("A4", 1), ("E5", 1), ("D5", 1), ("C#5", 3.0)], 523.0, 0.28, pedal=3.0)
-    S.strc(["A2", "E3", "A3", "C#4"], 522.0, 14.0, 0.055, att=3.0, rel=3.0, pts=[(0, 1), (14, .25)])
-
-
-EMO = {"cold_a": emo_cold_a, "cold_b": emo_cold_b, "ch1": emo_ch1, "ch2": emo_ch2, "ch3": emo_ch3, "ch4": emo_ch4,
-       "rise": emo_rise, "climax": emo_climax, "coda": emo_coda, "ch6": emo_ch6, "end": emo_end}
-# the organ steps back where the strings and piano carry the feeling
-ORG = {"cold_a": 0.85, "cold_b": 0.8, "ch1": 0.8, "ch2": 0.72, "ch3": 0.75, "ch4": 0.78, "rise": 0.75, "climax": 1.1,
-       "coda": 1.0, "ch6": 0.7, "end": 0.78}
+Sec.dub_note = _dub
 
 
 # section name -> (start, end, composer, master segment)
@@ -1332,11 +1043,12 @@ def render_section(name):
     t_start = time.time()
     t0, t1, fn, _ = SECTIONS[name]
     S = Sec(name, t0, t1, seed=sum(map(ord, name)) * 7919)
-    S.org = ORG.get(name, 1.0)
+    S.dub = name != "rise"                      # the Shepard pipes stay organ only
     fn(S)
-    S.org = 1.0
-    if name in EMO:
-        EMO[name](S)
+    t = S.start + np.arange(S.n, dtype=np.float32) / SR
+    mac = (0.5 + 0.8 * arc(t)).astype(np.float32)   # the whole mix follows the arc (about 8 dB from rest to peak)
+    S.dry *= mac
+    S.send *= mac
     return name, S.start, S.dry, S.send, time.time() - t_start
 
 

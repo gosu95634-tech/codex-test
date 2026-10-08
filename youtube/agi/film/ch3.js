@@ -509,9 +509,9 @@ function scoreText(k) {
   o.globalAlpha = a; o.fillStyle = g; o.fillRect(W / 2 - 420, y - 420, 840, 840);
   o.restore();
   const sp = 0.16 - 0.05 * ease(u * 1.5);
-  line("4", W / 2 - 128 - sp * 300, y, { size: 176, font: "Corm", color: "#f6ecd8", alpha: a, glow: 30, blur: (1 - a) * 8, spacing: 0 });
+  line("4", W / 2 - 128 - sp * 300, y, { size: 150, font: "SerifL", color: "#f6ecd8", alpha: a, glow: 30, blur: (1 - a) * 8, spacing: 0 });
   line(":", W / 2, y - 6, { size: 120, font: "Corm", color: GOLD, alpha: a * 0.85, glow: 18, blur: (1 - a) * 8, spacing: 0 });
-  line("1", W / 2 + 128 + sp * 300, y, { size: 176, font: "Corm", color: "#f6ecd8", alpha: a, glow: 30, blur: (1 - a) * 8, spacing: 0 });
+  line("1", W / 2 + 128 + sp * 300, y, { size: 150, font: "SerifL", color: "#f6ecd8", alpha: a, glow: 30, blur: (1 - a) * 8, spacing: 0 });
   o.save(); o.globalAlpha = a * 0.55; o.fillStyle = GOLD; const hw = 150 * smooth(61.6, 63.6, k); o.fillRect(W / 2 - hw, y + 108, hw * 2, 1); o.restore();
 }
 

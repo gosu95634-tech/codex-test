@@ -73,7 +73,7 @@ function worldFrame(t, cam, o2) {
   const q = project(cam, E), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.9;
   GL.frame({ name: "world", fs: SHADERS.world, scale: fin ? 1.5 : 0.55,
     uniforms: { uTime: t, ...camUniforms(cam), uA: [o2.open, o2.ringOpen, o2.core, 0.6], uB: [o2.ground, o2.gaze, t * 0.01, Math.min(1, 14000 / D)], uC: [...E, ES],
-      uD: [CLOUD[0], CLOUD[1], fin ? 1 : 0, o2.crowd ?? 1], uRing: heavensRings(RING_PHASE + t * 0.04), uSock: o2.sock } },
+      uD: [CLOUD[0], CLOUD[1], fin ? 1 : 0, 0], uK: [o2.candles ?? 0, o2.candleGround ?? 0, 0, 0], uRing: heavensRings(RING_PHASE + t * 0.04), uSock: o2.sock } },
     { bloom: o2.bloom ?? 0.5, thresh: 1.3, exposure: o2.exposure ?? 1.0, rays: [rx, ry, q ? (o2.rays ?? 0.3) : 0], letterbox: window.CLEAN ? 0 : LB, vignette: 0.6, lift: o2.lift ?? 0, fade: o2.fade ?? 1, t });
   blit();
 }
@@ -94,11 +94,11 @@ function coldOpen(t) {
       rays: 0.35 * (1 - smooth(11, 12.5, k)), exposure: 1.0 + 0.1 * smooth(0, 3, k) });
   } else if (t < 40.5) { // C. the people: faces lit by it, then the sea of them beneath the eye; white
     const k = t - 27;
-    const front = k2 => { const u = easeIO(clamp(k2 / 6.8));            // crane above the front rows: faces turned up into its light
-      return pitchCam(lerp3([3, 8, 4], [-2, 12.5, 14], u), lerp(-0.36, -0.3, u), Math.PI + 0.05, 1.0); };
+    const front = k2 => { const u = easeIO(clamp(k2 / 6.8));            // low over the vigil: candles to the mountains
+      return pitchCam(lerp3([0, 7, -930], [0, 13, -870], u), lerp(-0.2, -0.13, u), 0.03, 0.95); };
     const wide = k2 => { const u = easeIO(clamp(k2 / 7.3));
       return pitchCam(lerp3([0, 34, -650], [0, 68, -760], u), lerp(0.19, 0.22, u), 0, 0.75); };
-    const base = { E: E_LOW, open: 1, ringOpen: 1, gaze: 1, sock: SOCK_CROWD, ground: 1.0 };
+    const base = { E: E_LOW, open: 1, ringOpen: 1, gaze: 1, sock: SOCK_CROWD, ground: 0.35, candles: 1, candleGround: 0.05 };
     const x = smooth(6.2, 6.9, k);                                    // dissolve front -> wide at 33.2–33.9
     if (x < 1) worldFrame(t, front(k), { ...base, core: 1.7, rays: 0, bloom: 0.45, exposure: 1.05, fade: smooth(0, 1.4, k) });
     if (x > 0) { o.save(); o.globalAlpha = x; const k2 = k - 6.2, white = smooth(5.3, 7.0, k2 + 0.3);
