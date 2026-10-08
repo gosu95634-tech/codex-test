@@ -91,7 +91,7 @@ function coldOpen(t) {
     const pitch = Math.asin(dir[1]) - drop, yaw = Math.atan2(dir[0], dir[2]);
     const fov = 1.25 + 2.25 * easeIn(clamp((k - 10) / 2)) + 9 * easeIn(clamp((k - 11.2) / 1.8));
     worldFrame(t, pitchCam(pos, pitch, yaw, fov), { E, open: smooth(2, 5, k), ringOpen: smooth(3, 6.5, k), core: 1.7, ground: 0.75, gaze: smooth(5.2, 7.5, k), sock: SOCK_DOWN,
-      rays: 0.35 * (1 - smooth(11, 12.5, k)), exposure: 1.1 });
+      rays: 0.35 * (1 - smooth(11, 12.5, k)), exposure: 1.0 + 0.1 * smooth(0, 3, k) });
   } else if (t < 40.5) { // C. the people: faces lit by it, then the sea of them beneath the eye; white
     const k = t - 27;
     const front = k2 => { const u = easeIO(clamp(k2 / 6.8));            // crane above the front rows: faces turned up into its light
