@@ -1,0 +1,31 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "SerifL"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Light.ttf); }
+@font-face { font-family: "SerifM"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Medium.ttf); }
+@font-face { font-family: "SerifB"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Bold.ttf); }
+@font-face { font-family: "SansL"; src: url(../../claude-history/assets/fonts/NotoSansKR-Light.ttf); }
+@font-face { font-family: "SansM"; src: url(../../claude-history/assets/fonts/NotoSansKR-Medium.ttf); }
+@font-face { font-family: "SansB"; src: url(../../claude-history/assets/fonts/NotoSansKR-Black.ttf); }
+@font-face { font-family: "Corm"; src: url(../../claude-history/assets/fonts/Cormorant-Regular.ttf); }
+@font-face { font-family: "CormI"; src: url(../../claude-history/assets/fonts/Cormorant-Italic.ttf); }
+@font-face { font-family: "CormSB"; src: url(../../claude-history/assets/fonts/Cormorant-SemiBold.ttf); }
+html, body { margin: 0; background: #000; } canvas { display: block; }
+</style></head>
+<body>
+<canvas id="out" width="1920" height="1080"></canvas>
+<script src="shaders.js"></script>
+<script src="gl.js"></script>
+<script src="overlay.js"></script>
+<script src="timeline.js"></script>
+<script>
+// Chapter files. ?only=<id> loads just the file that defines that chapter, so one broken chapter cannot stop the others.
+{ const only = new URLSearchParams(location.search).get("only"), FILES = { ch1: "ch1.js", ch2: "ch2.js", ch3: "ch3.js", ch4: "ch4.js", ch5: "ch5.js", ch6: "ch6.js", end: "ch6.js" };
+  const want = only ? (only === "cold" ? [] : [FILES[only]]) : [...new Set(Object.values(FILES))];
+  for (const f of want) document.write(`<script src="${f}" onerror="this.remove()"><\/script>`); }
+</script>
+<script src="master.js"></script>
+<script>
+window.ready = async () => { await Promise.all(["SerifL", "SerifM", "SerifB", "SansL", "SansM", "SansB", "Corm", "CormI", "CormSB"].map(f => document.fonts.load(`40px "${f}"`, "가A"))); return { fonts: [...document.fonts].filter(f => f.status === "loaded").length, hdr: GL.hdr, renderer: GL.renderer }; };
+</script>
+</body></html>

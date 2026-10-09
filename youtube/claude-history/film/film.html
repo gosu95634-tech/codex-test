@@ -1,0 +1,72 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face { font-family: "Serif"; src: url(../assets/fonts/NotoSerifKR-Black.ttf); }
+@font-face { font-family: "Impact"; src: url(../assets/fonts/BlackHanSans.ttf); }
+@font-face { font-family: "Dela"; src: url(../assets/fonts/DelaGothicOne.ttf); }
+@font-face { font-family: "SansM"; src: url(../assets/fonts/NotoSansKR-Medium.ttf); }
+@font-face { font-family: "SansB"; src: url(../assets/fonts/NotoSansKR-Black.ttf); }
+@font-face { font-family: "Mono"; src: url(../assets/fonts/JetBrainsMono-Bold.ttf); }
+html, body { margin: 0; background: #000; }
+canvas { display: block; }
+</style></head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script src="lib.js"></script>
+<script>
+const main = document.getElementById("c"), m = main.getContext("2d");
+const mk = () => { const c = document.createElement("canvas"); c.width = W; c.height = H; return [c, c.getContext("2d")]; };
+const [buf, g] = mk(), [tmp, tg] = mk(), [post, pg] = mk();
+</script>
+<script src="scenes.js"></script>
+<script>
+// Flash gating: white pops only on hits at least 0.34 s apart, so the film never exceeds 3 flashes per second.
+let FLASHES_AT = [];
+function gateFlashes() {
+  // the rapid montage (b192–208) already alternates bright/dark cuts, so it gets no extra white pops
+  const hits = CUES.events.filter(e => ["impact", "stab", "title", "slam", "cut", "fanfare", "explode", "launch", "freeze"].includes(e.type) && !(e.type === "cut" && e.b > 192 && e.b < 208)).map(e => e.b * SPB).sort((a, b) => a - b);
+  FLASHES_AT = []; let last = -9;
+  for (const h of hits) if (h - last >= 0.34) { FLASHES_AT.push(h); last = h; }
+}
+const _setCues = setCues;
+window.setCues = c => { _setCues(c); gateFlashes(); };
+
+function renderFrame(t) {
+  const b = t / SPB;
+  g.save(); drawScene(t); g.restore();
+
+  const hitE = env(t, ["impact", "slam", "stab", "title", "cut", "fanfare", "explode", "launch"], 9), r = rng(Math.floor(t * 60) * 7 + 3);
+  const frozen = b >= 240;
+  const sh = frozen ? 0 : 18 * Math.min(1.6, hitE), zx = frozen ? 1 : 1 + 0.035 * Math.min(1.6, hitE);
+  const ox = (r() - 0.5) * 2 * sh, oy = (r() - 0.5) * 2 * sh;
+  const roll = (b >= 20 && b < 24) ? (b - 20) * 2.5 : (b >= 214 && b < 216) ? (b - 214) * 4 : 0;
+  const ca = frozen ? 0 : 14 * Math.min(1.6, env(t, ["slam", "impact", "stab", "cut", "explode", "launch"], 7)) + roll;
+  pg.setTransform(1, 0, 0, 1, 0, 0); pg.globalCompositeOperation = "source-over"; pg.fillStyle = "#000"; pg.fillRect(0, 0, W, H);
+  const place = (ctx, src, dx) => { ctx.save(); ctx.translate(W / 2 + ox + dx, H / 2 + oy); ctx.scale(zx, zx); ctx.drawImage(src, -W / 2, -H / 2); ctx.restore(); };
+  if (ca > 0.8) {
+    for (const [col, dx] of [["#ff0000", -ca], ["#00ff00", 0], ["#0000ff", ca]]) {
+      tg.globalCompositeOperation = "source-over"; tg.drawImage(buf, 0, 0);
+      tg.globalCompositeOperation = "multiply"; tg.fillStyle = col; tg.fillRect(0, 0, W, H);
+      pg.globalCompositeOperation = "lighter"; place(pg, tmp, dx);
+    }
+    pg.globalCompositeOperation = "source-over"; tg.globalCompositeOperation = "source-over";
+  } else place(pg, buf, 0);
+
+  // gated flashes: white pop, then a short inversion after slams
+  let fd = Infinity; for (const f of FLASHES_AT) { const d = t - f; if (d >= 0 && d < fd) fd = d; }
+  const [, de] = since(t, ["impact", "stab", "title", "slam", "cut", "fanfare", "explode", "launch", "freeze"]);
+  const big = de && ["slam", "explode", "launch"].includes(de.type);
+  if (fd < 2.5 / 60) { pg.fillStyle = PAPER; pg.globalAlpha = big ? 1 : 0.8; pg.fillRect(0, 0, W, H); pg.globalAlpha = 1; }
+  else if (big && fd < 6 / 60) { pg.globalCompositeOperation = "difference"; pg.fillStyle = "#fff"; pg.fillRect(0, 0, W, H); pg.globalCompositeOperation = "source-over"; }
+
+  pg.save(); pg.globalCompositeOperation = "overlay"; pg.globalAlpha = 0.09; const gc = GRAIN[Math.floor(t * 60) % 4];
+  pg.translate(-(r() * 256 | 0), -(r() * 256 | 0)); pg.fillStyle = pg.createPattern(gc, "repeat"); pg.fillRect(0, 0, W + 256, H + 256); pg.restore();
+  const vg = pg.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.05); vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.5)");
+  pg.fillStyle = vg; pg.fillRect(0, 0, W, H);
+  m.drawImage(post, 0, 0);
+}
+
+window.renderFrame = renderFrame;
+window.ready = async () => { await Promise.all(["Serif", "Impact", "Dela", "SansM", "SansB", "Mono"].map(f => document.fonts.load(`40px "${f}"`, "가A゙ゴキ✓"))); return [...document.fonts].filter(f => f.status === "loaded").length; };
+</script>
+</body></html>

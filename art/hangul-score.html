@@ -1,0 +1,392 @@
+<title>글자 가야금</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&family=Gothic+A1:wght@400;500;700&display=swap">
+<style>
+/* Layout: a single sheet of 정간보 — melody brushstroke on top, the now-playing syllable dissected, then the grid read right-to-left. */
+:root {
+  --paper: #f4f4f1;
+  --sheet: #fbfbf9;
+  --ink: #1b1c1f;
+  --muted: #6a6c72;
+  --rule: #c9cbcf;
+  --yang: #c23b2a;      /* 적: bright vowels ㅏ ㅗ */
+  --yin: #2457a6;       /* 청: dark vowels ㅓ ㅜ */
+  --mid: #b88a12;       /* 황: neutral ㅡ ㅣ */
+  --f-display: "Nanum Myeongjo", "AppleMyungjo", "Batang", serif;
+  --f-body: "Gothic A1", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #111214; --sheet: #18191c; --ink: #e9e8e3; --muted: #9a9ca2; --rule: #34363b;
+    --yang: #ff7a63; --yin: #7aa5ff; --mid: #e5b84a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #111214; --sheet: #18191c; --ink: #e9e8e3; --muted: #9a9ca2; --rule: #34363b;
+  --yang: #ff7a63; --yin: #7aa5ff; --mid: #e5b84a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.6;
+  padding-inline: 16px; padding-block: 24px 40px; word-break: keep-all; overflow-wrap: anywhere;
+}
+.wrap { max-width: 720px; margin: 0 auto; display: grid; gap: 18px; }
+header { display: grid; gap: 6px; }
+h1 { margin: 0; font-family: var(--f-display); font-weight: 800; font-size: clamp(34px, 8vw, 52px); line-height: 1.1; letter-spacing: -.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted); max-width: 60ch; }
+
+.sheet { background: var(--sheet); border: 1px solid var(--rule); border-radius: 4px; padding: 16px; display: grid; gap: 14px; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+textarea {
+  width: 100%; min-height: 128px; resize: vertical; font: 400 18px/1.7 var(--f-display); color: var(--ink);
+  background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 10px 12px;
+}
+textarea:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--yin); outline-offset: 2px; }
+.preset { font: 500 13px var(--f-body); padding: 6px 11px; border-radius: 999px; border: 1px solid var(--rule); background: transparent; color: var(--ink); cursor: pointer; }
+.preset[aria-pressed="true"] { background: var(--ink); color: var(--sheet); border-color: var(--ink); }
+.play { font: 700 16px var(--f-body); padding: 11px 22px; border-radius: 4px; border: none; background: var(--yang); color: #fff; cursor: pointer; min-width: 110px; }
+.play.on { background: var(--ink); color: var(--sheet); }
+.tempo { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-left: auto; }
+.tempo input { width: 120px; accent-color: var(--yang); }
+.tempo output { font-variant-numeric: tabular-nums; min-width: 5.5ch; color: var(--ink); }
+
+.stroke { width: 100%; height: 150px; display: block; }
+
+.now { display: grid; grid-template-columns: auto 1fr; gap: 18px; align-items: center; padding-block: 4px; }
+.big { font-family: var(--f-display); font-weight: 800; font-size: 76px; line-height: 1; width: 1.15em; text-align: center; transition: color .15s; }
+.parts { display: grid; gap: 4px; min-width: 0; }
+.jamo { font-family: var(--f-display); font-size: 22px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.jamo span small { font-family: var(--f-body); font-size: 11px; color: var(--muted); margin-left: 3px; letter-spacing: .04em; }
+.yul { font-size: 14px; color: var(--muted); }
+.yul b { font-family: var(--f-display); font-size: 20px; color: var(--ink); margin-right: 6px; }
+
+.gakbo-wrap { overflow-x: auto; direction: rtl; padding-bottom: 4px; }
+.gakbo { display: inline-grid; grid-template-rows: repeat(8, 40px); grid-auto-flow: column; grid-auto-columns: 40px; border-top: 1.5px solid var(--ink); border-bottom: 1.5px solid var(--ink); border-right: 1.5px solid var(--ink); }
+.cell { direction: ltr; display: grid; place-items: center; border-left: 1.5px solid var(--ink); border-bottom: 1px solid var(--rule); font-family: var(--f-display); font-size: 19px; font-weight: 700; position: relative; }
+.cell:nth-child(8n) { border-bottom: none; }
+.cell.rest { color: var(--muted); font-size: 11px; font-weight: 400; }
+.cell .tick { position: absolute; right: 3px; top: 3px; width: 5px; height: 5px; border-radius: 50%; }
+.cell.yang { color: var(--yang); } .cell.yang .tick { background: var(--yang); }
+.cell.yin { color: var(--yin); }   .cell.yin .tick { background: var(--yin); }
+.cell.mid { color: var(--mid); }   .cell.mid .tick { background: var(--mid); }
+.cell.live { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+
+details { font-size: 14px; color: var(--muted); }
+details summary { cursor: pointer; color: var(--ink); font-weight: 500; }
+details ul { padding-left: 18px; margin: 8px 0 0; display: grid; gap: 4px; max-width: 62ch; }
+.foot { font-size: 12px; color: var(--muted); }
+@media (max-width: 520px) { .tempo { margin-left: 0; } .big { font-size: 60px; } }
+@media (prefers-reduced-motion: reduce) { .big { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>글자 가야금</h1>
+    <p class="lede">문장을 쓰면 글자마다 국악 평조의 음이 붙어요. 첫소리는 음높이, 가운뎃소리는 색과 화음, 받침은 길이와 울림이 돼요. 악보는 정간보처럼 오른쪽 위에서부터 세로로 읽어요.</p>
+  </header>
+
+  <section class="sheet">
+    <div class="row" role="group" aria-label="예시 글">
+      <button class="preset" type="button" data-k="claude" aria-pressed="true">서버실의 새벽</button>
+      <button class="preset" type="button" data-k="seosi">서시 · 윤동주</button>
+      <button class="preset" type="button" data-k="arirang">아리랑</button>
+      <button class="preset" type="button" data-k="kk">ㅋㅋㅋㅋ</button>
+    </div>
+    <label for="txt" class="foot">여기에 아무 글이나 써 보세요. 이름도 좋아요.</label>
+    <textarea id="txt" spellcheck="false"></textarea>
+    <div class="row">
+      <button class="play" id="play" type="button">연주</button>
+      <label class="tempo" for="bpm">빠르기 <input id="bpm" type="range" min="50" max="160" value="88"><output id="bpmv">88 BPM</output></label>
+    </div>
+  </section>
+
+  <section class="sheet" aria-label="악보">
+    <canvas class="stroke" id="cv" aria-label="선율선"></canvas>
+    <div class="now">
+      <div class="big" id="big">새</div>
+      <div class="parts">
+        <div class="jamo" id="jamo"></div>
+        <div class="yul" id="yul"></div>
+      </div>
+    </div>
+    <div class="gakbo-wrap"><div class="gakbo" id="gakbo"></div></div>
+    <div class="legend">
+      <span><i style="background: var(--yang)"></i>양성 모음 ㅏ ㅗ · 밝은 화음</span>
+      <span><i style="background: var(--yin)"></i>음성 모음 ㅓ ㅜ · 어두운 화음</span>
+      <span><i style="background: var(--mid)"></i>중성 모음 ㅡ ㅣ · 열린 화음</span>
+      <span>△ 쉼</span>
+    </div>
+  </section>
+
+  <details>
+    <summary>어떻게 소리가 되나요</summary>
+    <ul>
+      <li>음은 평조 다섯 음 황(黃)·태(太)·중(仲)·임(林)·남(南)이에요. 낮은 옥타브는 배(倍), 높은 옥타브는 청(淸)을 붙여요.</li>
+      <li>첫소리(초성)가 기본 음을 정해요. 된소리 ㄲ ㄸ ㅃ ㅆ ㅉ는 높게 튀어요.</li>
+      <li>가운뎃소리(중성)는 양성이면 한 칸 위, 음성이면 한 칸 아래로 음을 옮기고, 바닥에 깔리는 화음을 바꿔요. ㅣ는 두 칸 올라가요.</li>
+      <li>받침(종성)이 있으면 음이 길어지고, 낮은 줄을 한 번 더 뜯어요. 긴 음에는 가야금처럼 농현(떨림)이 들어가요.</li>
+      <li>띄어쓰기는 짧은 쉼, 줄바꿈과 문장부호는 긴 쉼이에요.</li>
+    </ul>
+  </details>
+  <p class="foot">「서버실의 새벽」은 Claude가 이 페이지를 위해 쓴 시예요. 「서시」 윤동주(1941)와 「아리랑」은 공유 저작물이에요.</p>
+</div>
+
+<script>
+(() => {
+  const PRESETS = {
+    claude: "새벽 세 시의 서버실\n아무도 묻지 않는 질문에\n팬 소리만 대답한다\n불 꺼진 도시 위로\n구름이 글자를 싣고 간다",
+    seosi: "죽는 날까지 하늘을 우러러\n한 점 부끄럼이 없기를,\n잎새에 이는 바람에도\n나는 괴로워했다.",
+    arirang: "아리랑 아리랑 아라리요\n아리랑 고개로 넘어간다\n나를 버리고 가시는 님은\n십 리도 못 가서 발병 난다",
+    kk: "ㅋㅋㅋㅋ ㅋㅋ ㅎㅎ\nㅠㅠ ㅋㅋㅋㅋㅋ",
+  };
+  const CHO = "ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ";
+  const JUNG = "ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ";
+  const JONG = ["", "ㄱ","ㄲ","ㄳ","ㄴ","ㄵ","ㄶ","ㄷ","ㄹ","ㄺ","ㄻ","ㄼ","ㄽ","ㄾ","ㄿ","ㅀ","ㅁ","ㅂ","ㅄ","ㅅ","ㅆ","ㅇ","ㅈ","ㅊ","ㅋ","ㅌ","ㅍ","ㅎ"];
+  // ladder step for each initial consonant (0 = 배황). Tense consonants jump up.
+  const CHO_STEP = [3, 9, 5, 4, 10, 6, 4, 5, 11, 7, 11, 6, 7, 10, 8, 5, 6, 7, 8];
+  const YANG = new Set("ㅏㅐㅑㅒㅗㅘㅙㅚㅛ"), YIN = new Set("ㅓㅔㅕㅖㅜㅝㅞㅟㅠ");
+  const YUL = ["황", "태", "중", "임", "남"], YUL_HAN = ["黃", "太", "仲", "林", "南"];
+  const PENTA = [0, 2, 5, 7, 9];
+  const BASE_MIDI = 51; // 배황 ≈ E♭3
+  const LADDER_MAX = 14;
+
+  const $ = id => document.getElementById(id);
+  const txt = $("txt"), playBtn = $("play"), bpm = $("bpm");
+
+  const groupOf = v => YANG.has(v) ? "yang" : YIN.has(v) ? "yin" : "mid";
+  const midiOf = n => BASE_MIDI + 12 * Math.floor(n / 5) + PENTA[n % 5];
+  const yulName = n => { const o = Math.floor(n / 5); return (o === 0 ? "배" : o === 2 ? "청" : "") + YUL[n % 5]; };
+  const yulHan = n => { const o = Math.floor(n / 5); return (o === 0 ? "倍" : o === 2 ? "淸" : "") + YUL_HAN[n % 5]; };
+
+  function parse(text) {
+    const ev = [];
+    for (const ch of text) {
+      const c = ch.codePointAt(0);
+      let cho = -1, jung = 18, jong = 0;
+      if (c >= 0xac00 && c <= 0xd7a3) { const k = c - 0xac00; cho = Math.floor(k / 588); jung = Math.floor((k % 588) / 28); jong = k % 28; }
+      else if (CHO.includes(ch)) { cho = CHO.indexOf(ch); }
+      else if (JUNG.includes(ch)) { cho = 11; jung = JUNG.indexOf(ch); }
+      if (cho >= 0) {
+        const v = JUNG[jung], g = groupOf(v);
+        let n = CHO_STEP[cho] + (g === "yang" ? 1 : g === "yin" ? -1 : v === "ㅣ" ? 2 : 0);
+        n = Math.max(0, Math.min(LADDER_MAX, n));
+        ev.push({ kind: "note", ch, cho, jung, jong, g, n, beats: jong ? 0.75 : 0.5 });
+      } else if (ch === "\n") ev.push({ kind: "break", beats: 1 });
+      else if (ch === " ") ev.push({ kind: "rest", beats: 0.5 });
+      else if (/[.,!?…·~]/.test(ch)) ev.push({ kind: "rest", beats: 1 });
+    }
+    return ev;
+  }
+
+  // ---------- audio
+  let ac = null, master = null, wet = null, padNodes = null;
+  function ensureAudio() {
+    if (ac) return;
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.7;
+    const comp = ac.createDynamicsCompressor();
+    master.connect(comp).connect(ac.destination);
+    const conv = ac.createConvolver();
+    const len = ac.sampleRate * 2.6, ir = ac.createBuffer(2, len, ac.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6); }
+    conv.buffer = ir;
+    wet = ac.createGain(); wet.gain.value = 0.32;
+    wet.connect(conv).connect(master);
+    // drone pad: two soft voices that glide between harmonies
+    const padGain = ac.createGain(); padGain.gain.value = 0;
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 700;
+    padGain.connect(lp); lp.connect(master); lp.connect(wet);
+    const oscs = [0, 1].map(() => { const o = ac.createOscillator(); o.type = "sine"; o.connect(padGain); o.start(); return o; });
+    padNodes = { padGain, oscs };
+  }
+  const hz = m => 440 * Math.pow(2, (m - 69) / 12);
+  const HARM = { yang: [0, 3], yin: [4, 1], mid: [2, 0] }; // ladder degrees for drone (황+임 / 남+태 / 중+황)
+
+  function pluck(t, midi, dur, gain, vib) {
+    const o = ac.createOscillator(), o2 = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+    o.type = "triangle"; o2.type = "sine";
+    const fr = hz(midi);
+    o.frequency.setValueAtTime(fr * 1.012, t); o.frequency.exponentialRampToValueAtTime(fr, t + 0.06);
+    o2.frequency.setValueAtTime(fr * 2, t);
+    f.type = "lowpass"; f.frequency.setValueAtTime(4200, t); f.frequency.exponentialRampToValueAtTime(900, t + dur + 0.4);
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.9);
+    const g2 = ac.createGain(); g2.gain.value = 0.18;
+    o.connect(f); o2.connect(g2).connect(f); f.connect(g); g.connect(master); g.connect(wet);
+    if (vib) { // 농현: delayed vibrato on long notes
+      const l = ac.createOscillator(), lg = ac.createGain();
+      l.frequency.value = 5.2; lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(fr * 0.018, t + dur * 0.8);
+      l.connect(lg); lg.connect(o.frequency); l.start(t); l.stop(t + dur + 1);
+    }
+    o.start(t); o2.start(t); o.stop(t + dur + 1); o2.stop(t + dur + 1);
+  }
+
+  function setPad(t, g) {
+    const [a, b] = HARM[g];
+    padNodes.oscs[0].frequency.setTargetAtTime(hz(midiOf(a)) / 2, t, 0.25);
+    padNodes.oscs[1].frequency.setTargetAtTime(hz(midiOf(b)) / 2, t, 0.25);
+  }
+
+  // ---------- playback
+  let events = [], schedule = [], playing = false, startAt = 0, nextIdx = 0, timer = null, liveIdx = -1;
+  const beatSec = () => 60 / Number(bpm.value);
+
+  function buildSchedule() {
+    schedule = []; let t = 0;
+    events.forEach((e, i) => { schedule.push({ i, t, d: e.beats * beatSec() }); t += e.beats * beatSec(); });
+    return t;
+  }
+
+  function tick() {
+    const ahead = ac.currentTime + 0.15;
+    while (nextIdx < schedule.length && startAt + schedule[nextIdx].t < ahead) {
+      const s = schedule[nextIdx], e = events[s.i], t = startAt + s.t;
+      if (e.kind === "note") {
+        pluck(t, midiOf(e.n), s.d, 0.32, e.jong > 0);
+        if (e.jong) pluck(t + s.d * 0.45, midiOf(Math.max(0, e.n - 5)), s.d * 0.8, 0.14, false);
+        setPad(t, e.g);
+      }
+      nextIdx++;
+    }
+    if (nextIdx >= schedule.length && ac.currentTime > startAt + (schedule.at(-1)?.t ?? 0) + 1.6) stop();
+  }
+
+  function play() {
+    ensureAudio(); ac.resume();
+    events = parse(txt.value);
+    if (!events.some(e => e.kind === "note")) return;
+    render();
+    buildSchedule();
+    startAt = ac.currentTime + 0.12; nextIdx = 0; playing = true;
+    padNodes.padGain.gain.cancelScheduledValues(ac.currentTime);
+    padNodes.padGain.gain.setTargetAtTime(0.07, ac.currentTime, 0.5);
+    timer = setInterval(tick, 25); tick();
+    playBtn.textContent = "멈춤"; playBtn.classList.add("on");
+  }
+  function stop() {
+    playing = false; clearInterval(timer);
+    if (padNodes) padNodes.padGain.gain.setTargetAtTime(0, ac.currentTime, 0.3);
+    playBtn.textContent = "연주"; playBtn.classList.remove("on");
+    setLive(-1);
+  }
+  playBtn.addEventListener("click", () => playing ? stop() : play());
+
+  // ---------- drawing
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  let colors = {}, cells = [];
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of ["ink", "muted", "rule", "yang", "yin", "mid"]) colors[k] = cs.getPropertyValue("--" + k).trim();
+  }
+
+  function drawStroke() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1), r = cv.getBoundingClientRect();
+    const W = r.width, H = r.height;
+    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    const notes = events.map((e, i) => ({ e, i })).filter(x => x.e.kind === "note");
+    if (!notes.length) return;
+    const total = events.reduce((a, e) => a + e.beats, 0);
+    const pos = []; let acc = 0; events.forEach(e => { pos.push(acc); acc += e.beats; });
+    const X = i => 10 + (pos[i] + events[i].beats / 2) / total * (W - 20);
+    const Y = n => H - 14 - n / LADDER_MAX * (H - 28);
+    // staff lines at each 황
+    ctx.strokeStyle = colors.rule; ctx.lineWidth = 1; ctx.font = "11px " + getComputedStyle(document.body).fontFamily; ctx.fillStyle = colors.muted;
+    for (const n of [0, 5, 10]) { const y = Math.round(Y(n)) + .5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.fillText(yulName(n), 2, y - 4); }
+    // brush: segments between notes, broken at line breaks
+    ctx.lineCap = "round"; ctx.lineJoin = "round";
+    for (let k = 1; k < notes.length; k++) {
+      const a = notes[k - 1], b = notes[k];
+      if (events.slice(a.i, b.i).some(e => e.kind === "break")) continue;
+      const done = liveIdx >= b.i;
+      ctx.strokeStyle = colors.ink; ctx.globalAlpha = done || liveIdx < 0 ? .85 : .25;
+      ctx.lineWidth = 1.5 + (a.e.jong ? 2.2 : 0.8);
+      ctx.beginPath(); ctx.moveTo(X(a.i), Y(a.e.n));
+      const mx = (X(a.i) + X(b.i)) / 2;
+      ctx.bezierCurveTo(mx, Y(a.e.n), mx, Y(b.e.n), X(b.i), Y(b.e.n)); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    for (const { e, i } of notes) {
+      const live = i === liveIdx;
+      ctx.fillStyle = colors[e.g];
+      ctx.beginPath(); ctx.arc(X(i), Y(e.n), live ? 7 : e.jong ? 3.6 : 2.6, 0, 7); ctx.fill();
+    }
+  }
+
+  function render() {
+    events = parse(txt.value);
+    const g = $("gakbo"); g.textContent = ""; cells = [];
+    let rowPos = 0;
+    const add = (cls, text, idx) => {
+      const d = document.createElement("div"); d.className = "cell " + cls; d.textContent = text;
+      if (cls.includes("yang") || cls.includes("yin") || cls.includes("mid")) { const t = document.createElement("span"); t.className = "tick"; d.appendChild(t); }
+      g.appendChild(d); cells.push({ el: d, idx }); rowPos = (rowPos + 1) % 8;
+    };
+    events.forEach((e, i) => {
+      if (e.kind === "note") add(e.g, e.ch, i);
+      else if (e.kind === "rest") add("rest", "△", i);
+      else if (e.kind === "break") { if (rowPos === 0) add("rest", "△", i); while (rowPos !== 0) add("rest", "", i); }
+    });
+    while (rowPos !== 0) add("rest", "", -1);
+    showSyllable(events.find(e => e.kind === "note"));
+    drawStroke();
+  }
+
+  function showSyllable(e) {
+    if (!e) { $("big").textContent = "·"; $("jamo").textContent = ""; $("yul").textContent = ""; return; }
+    $("big").textContent = e.ch; $("big").style.color = `var(--${e.g})`;
+    const parts = [[CHO[e.cho], "첫소리"], [JUNG[e.jung], "가운뎃소리"]];
+    if (e.jong) parts.push([JONG[e.jong], "받침"]);
+    $("jamo").innerHTML = parts.map(([j, l]) => `<span>${j}<small>${l}</small></span>`).join("<span>+</span>");
+    $("yul").innerHTML = `<b>${yulName(e.n)} ${yulHan(e.n)}</b>${e.jong ? "길게 · 농현 · 낮은 줄 한 번 더" : "짧게"} · ${e.g === "yang" ? "밝은 화음" : e.g === "yin" ? "어두운 화음" : "열린 화음"}`;
+  }
+
+  function setLive(i) {
+    if (i === liveIdx) return;
+    liveIdx = i;
+    for (const c of cells) c.el.classList.toggle("live", c.idx === i && i >= 0);
+    const e = events[i];
+    if (e && e.kind === "note") {
+      showSyllable(e);
+      const c = cells.find(c => c.idx === i);
+      c?.el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    drawStroke();
+  }
+
+  function frame() {
+    if (playing) {
+      const now = ac.currentTime - startAt;
+      let cur = -1;
+      for (const s of schedule) { if (s.t <= now) cur = s.i; else break; }
+      setLive(cur);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- wiring
+  function choose(k) {
+    document.querySelectorAll(".preset").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.k === k)));
+    txt.value = PRESETS[k]; if (playing) stop(); render();
+  }
+  document.querySelectorAll(".preset").forEach(b => b.addEventListener("click", () => choose(b.dataset.k)));
+  txt.addEventListener("input", () => {
+    document.querySelectorAll(".preset").forEach(b => b.setAttribute("aria-pressed", "false"));
+    if (playing) stop();
+    render();
+  });
+  bpm.addEventListener("input", () => { $("bpmv").textContent = bpm.value + " BPM"; });
+  window.addEventListener("resize", () => drawStroke());
+  new MutationObserver(() => { readColors(); drawStroke(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => { readColors(); drawStroke(); });
+
+  readColors();
+  txt.value = PRESETS.claude;
+  render();
+  requestAnimationFrame(frame);
+})();
+</script>
