@@ -26,93 +26,163 @@ vec3 nebula(vec3 rd, vec3 tintA, vec3 tintB){
   return c; }
 `;
 
-// Shared entity library: rings (uRing from JS), ring eyes, the great eye. Needs COMMON. Uses uA.x eye open, uA.y ring-eye open,
-// uB.y gaze (0 rest → 1 camera), uSock = direction the eye socket faces.
+// Shared entity library: the being of the film. A dark world (its body and lids) with a living eye, inside bands of metal
+// like the hoops of an armillary sphere, their outer faces set with eyes. Needs COMMON. Uses uA.x eye open, uA.y ring-eye
+// open (each eye at its own moment), uA.z core light, uB.y gaze (0 rest → 1 camera), uSock = the way the eye socket faces.
+// ch5 carries a richer copy (ENT5) for its close orbital shot; keep the two in step.
 const ENTITY = `
 uniform mat3 uRing[6]; uniform vec3 uSock;
 const int NR=6;
 float gClipY=-1e9;   // world height below which the rings vanish (into a cloud deck); scenes may set it in main()
-float sdTorus(vec3 p, vec2 t){ vec2 q=vec2(length(p.xz)-t.x,p.y); return length(q)-t.y; }
+const float EW=.1, EH=.04, BT=.0075;
+vec3 hash33(vec3 p3){ p3=fract(p3*vec3(.1031,.1030,.0973)); p3+=dot(p3,p3.yxz+33.33); return fract((p3.xxy+p3.yxx)*p3.zyx)*2.-1.; }
+float gnoise(vec3 p){ vec3 i=floor(p), f=fract(p), u=f*f*f*(f*(f*6.-15.)+10.);
+  float a=dot(hash33(i),f), b=dot(hash33(i+vec3(1,0,0)),f-vec3(1,0,0)), c=dot(hash33(i+vec3(0,1,0)),f-vec3(0,1,0)), d=dot(hash33(i+vec3(1,1,0)),f-vec3(1,1,0));
+  float e=dot(hash33(i+vec3(0,0,1)),f-vec3(0,0,1)), g=dot(hash33(i+vec3(1,0,1)),f-vec3(1,0,1)), h=dot(hash33(i+vec3(0,1,1)),f-vec3(0,1,1)), k=dot(hash33(i+vec3(1,1,1)),f-vec3(1,1,1));
+  return mix(mix(mix(a,b,u.x),mix(c,d,u.x),u.y),mix(mix(e,g,u.x),mix(h,k,u.x),u.y),u.z); }
 float ringR(int i){ return 1.05+float(i)*0.3; }
-float ringr(int i){ return 0.024+float(i)*0.003; }
+float ringW(int i){ return .052+float(i)*.006; }
+float sdBand(vec3 q, float R, float w){ vec2 d=abs(vec2(length(q.xz)-R, q.y))-vec2(BT,w); return min(max(d.x,d.y),0.)+length(max(d,0.))-.002; }
 float mapE(vec3 p, out int id, out vec3 lp){ float d=1e9; id=-1;
-  for(int i=0;i<NR;i++){ vec3 q=uRing[i]*p; float di=sdTorus(q, vec2(ringR(i), ringr(i))); if(di<d){ d=di; id=i; lp=q; } }
+  for(int i=0;i<NR;i++){ vec3 q=uRing[i]*p; float di=sdBand(q, ringR(i), ringW(i)); if(di<d){ d=di; id=i; lp=q; } }
   return d; }
-vec3 calcN(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=0.0015; int i2; vec3 l2;
+vec3 calcN(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=0.001; int i2; vec3 l2;
   return normalize(k.xyy*mapE(p+k.xyy*h,i2,l2)+k.yyx*mapE(p+k.yyx*h,i2,l2)+k.yxy*mapE(p+k.yxy*h,i2,l2)+k.xxx*mapE(p+k.xxx*h,i2,l2)); }
 vec3 skyCol(vec3 rd){
   float up=clamp(rd.y,0.,1.);
   vec3 c=mix(vec3(.035,.05,.09), vec3(.006,.008,.02), pow(up,.6));
   return c + stars(rd, .35*smoothstep(.1,.5,up)); }
-vec3 ringEye(vec3 lp, int id, vec3 camL, out float isEye){
-  isEye=0.; float R=ringR(id), r=ringr(id);
-  float th=atan(lp.z,lp.x); vec3 radial=normalize(vec3(lp.x,0.,lp.z)); vec3 v=lp-radial*R; float ph=atan(v.y, dot(v,radial));
+// what its polished surfaces mirror: the sky above, the dim world below
+vec3 envE(vec3 rd){ return rd.y>0.? skyCol(rd) : mix(vec3(.012,.014,.022), vec3(.035,.036,.05), exp(rd.y*6.)); }
+// one eye set into the outer face of a band; isEye: 1 = eye, .5 = its closed lid and bezel, 0 = metal
+vec3 ringEye(vec3 lp, int id, vec3 camL, float face, out float isEye){
+  isEye=0.; if(face<.7) return vec3(0);
+  float R=ringR(id), th=atan(lp.z,lp.x);
   float N=floor(9.+float(id)*4.); float cell=6.2831853/N; float k=floor(th/cell+.5); float u=(th-k*cell)*R;
-  float w=ph*r; float ew=0.07, eh=0.03*uA.y; float e=1.-(u*u)/(ew*ew); if(e<=0.||abs(ph)>1.4) return vec3(0);
-  float lid=eh*e; if(abs(w)>lid) return vec3(0);
-  isEye=1.;
+  float kk=mod(k+N,N); float h=hash12(vec2(kk*1.37+3.1, float(id)*7.3+1.9));
+  float o0=(float(id)+h*2.4)/7.6*.88; float op=smoothstep(o0,o0+.12,uA.y);
+  float eh=min(EH, ringW(id)*.75), w=lp.y, e=1.-(u*u)/(EW*EW); if(e<=0.) return vec3(0);
+  float lid=eh*e*op;
+  if(abs(w)>lid){ if(abs(w)<eh*e+.004) isEye=.5; return vec3(0); }
+  isEye=1.; float sc=EW/.07;
   vec3 tU=normalize(vec3(-lp.z,0.,lp.x)), tW=vec3(0,1,0); vec3 toCam=normalize(camL-lp);
-  vec2 look=vec2(dot(toCam,tU), dot(toCam,tW))*0.026*uB.y + vec2(sin(k*1.7+float(id))*.012, cos(k*2.3)*.006)*(1.-uB.y);
-  vec2 q=vec2(u,w)-look; float d=length(q);
-  vec3 c=vec3(1.05,.98,.88)*(.6+.4*smoothstep(lid,0.,abs(w)));
-  if(d<0.021) c=mix(vec3(2.2,1.3,.45), vec3(.8,.38,.08), d/0.021)*(.8+.2*sin(atan(q.y,q.x)*18.));
-  if(d<0.008) c=vec3(.002);
-  return c; }
+  vec2 lk=vec2(dot(toCam,tU), dot(toCam,tW))*0.026*sc*uB.y + vec2(sin(k*1.7+float(id))*.012, cos(k*2.3)*.006)*sc*(1.-uB.y);
+  vec2 q=vec2(u,w)-lk; float d=length(q);
+  vec3 c=vec3(.62,.56,.48)*(.45+.55*smoothstep(lid,0.,abs(w)));
+  float ir=.021*sc, pr=.008*sc*(1.-.25*uB.y);
+  if(d<ir){ float aa=atan(q.y,q.x); c=mix(vec3(2.,1.15,.38), vec3(.6,.26,.05), d/ir)*(.7+.3*noise(vec3(cos(aa)*7.,sin(aa)*7.,d/ir*3.))); }
+  if(d<pr) c=vec3(.002);
+  if(length(q-vec2(-.3,.35)*ir)<.16*ir) c=vec3(1.8);
+  return c*(.3+.7*smoothstep(0.,.6,op)); }
+// relief of the being's body: ridged fBm on the unit sphere, and a few thin warped rifts (fis)
+float bodyH(vec3 n, float pf, out float fis){
+  float s=0., a=.5, f=2.3; fis=0.;
+  for(int i=0;i<7;i++){ float w=1.-smoothstep(.15,.45,pf*f); if(w<=0.) break;
+    float g=gnoise(n*f+vec3(float(i)*3.7,1.3,-2.1)); float r=1.-abs(g)*2.2; s+=a*w*r*abs(r);
+    if(i>0 && i<3){ vec3 nw=n*f*1.3+vec3(11.3,float(i)*5.9,7.7); nw+=.35*vec3(gnoise(nw*2.1),gnoise(nw*2.1+4.),gnoise(nw*2.1+9.));
+      fis+=w*a*2.5*smoothstep(.984,.998,1.-abs(gnoise(nw))); }
+    a*=.5; f*=2.13; }
+  return s; }
+// The great eye: a dark world (the body, its lids) parting around a living eyeball. pf = a pixel in eye radii.
 vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, out float tHit){
   tHit=1e9; float R=0.66*S; vec3 oc=ro-E; float b=dot(oc,rd), c=dot(oc,oc)-R*R, h=b*b-c; if(h<0.) return vec3(-1.);
   tHit=-b-sqrt(h); if(tHit<0.){ tHit=1e9; return vec3(-1.); }
   vec3 p=ro+rd*tHit, n=normalize(p-E);
+  float pf=tHit/(uFov*uRes.y)/R, LI=clamp(uA.z*.5,.4,1.4);
   vec3 f0=normalize(uSock);
   vec3 r0=normalize(cross(vec3(0,1,0),f0)), u0=cross(f0,r0);
   float fx=dot(n,r0), fy=dot(n,u0), ff=dot(n,f0);
-  float open=uA.x, aper=0.46*open*pow(max(1.-fx*fx/0.7,0.),0.75);
-  vec3 L=normalize(vec3(0.,1.,0.));
-  float fil=pow(.5+.5*sin(atan(fy,fx)*36.+acos(clamp(ff,-1.,1.))*30.),16.);
-  vec3 shell=vec3(.012,.011,.014) + vec3(1.,.72,.36)*fil*.18*smoothstep(-.2,.6,ff) + vec3(.9,.7,.45)*pow(1.-max(dot(n,-rd),0.),4.)*.5;
-  if(ff<0.25 || abs(fy)>aper) return shell;
+  float open=uA.x, prof=pow(max(1.-fx*fx/.7,0.),.75);
+  float rag=1.+.07*gnoise(vec3(fx*7.,fy>0.? 1.:-1.,2.))+.03*gnoise(vec3(fx*23.,fy>0.? 3.:-3.,5.));
+  float aperU=.52*open*prof*rag, aperL=.36*open*prof*rag, aper=fy>0.? aperU : aperL;
+  vec3 V=-rd;
+  float glowIn=.25+.75*smoothstep(0.,.25,open);
+  float wake=smoothstep(0.,.03,open)*(1.-smoothstep(.08,.5,open));
+  // --- the body: dark basalt and old metal, ridges, rifts that glow with the light inside it
+  float fis, fis1, fis2;
+  float dl=max(.003,pf*1.5);
+  vec3 t1=normalize(cross(n,f0+vec3(.01,.02,.03))), t2=cross(n,t1);
+  float h0=bodyH(n,pf,fis), h1=bodyH(normalize(n+t1*dl),pf,fis1), h2=bodyH(normalize(n+t2*dl),pf,fis2);
+  vec3 nb=normalize(n-(t1*(h1-h0)+t2*(h2-h0))*(.04/dl));
+  vec3 Lo=E+f0*R*.8, toO=Lo-p; float dO=length(toO)/R; toO=normalize(toO);
+  float spill=(.9*smoothstep(0.,.25,open)+2.*wake)*LI/(1.+dO*dO*4.);
+  vec3 albB=mix(vec3(.025,.023,.021), vec3(.085,.07,.056), smoothstep(-.1,.5,h0));
+  vec3 shell=albB*(vec3(1.,.7,.4)*max(dot(nb,toO),0.)*spill*6. + vec3(.3,.38,.5)*max(dot(nb,vec3(0,-1,0)),0.)*.8 + vec3(.25,.3,.45)*max(nb.y,0.)*.5 + .012);
+  float fb=.04+.96*pow(1.-max(dot(nb,V),0.),5.);
+  shell+=envE(reflect(rd,nb))*fb*.5;
+  shell+=vec3(1.5,.85,.32)*min(fis,1.)*.5*exp(-dO*2.6)*smoothstep(0.,.3,open)*LI;
+  shell+=vec3(1.,.72,.4)*pow(1.-max(dot(n,V),0.),3.)*.3*LI;
+  float de=abs(fy)-aper;
+  float edgeMask=smoothstep(.86,.6,abs(fx))*smoothstep(.2,.35,ff);
+  float cliff=smoothstep(.05,0.,de)*step(0.,de)*edgeMask;
+  shell=mix(shell, vec3(1.2,.75,.38)*(.05+.1*smoothstep(.05,0.,de))*glowIn*LI, cliff*.7);
+  float seam=exp(-pow(de/max(.004,pf*1.2),2.))*edgeMask;
+  shell+=vec3(1.6,1.1,.55)*seam*(.08+1.4*smoothstep(0.,.06,open)*(1.-smoothstep(.3,.9,open))+2.5*wake)*LI;
+  if(ff<.25 || fy>aperU || fy<-aperL) return shell;
+  // --- the eyeball
   vec3 g=normalize(mix(normalize(f0+vec3(.15,-.05,0.)), normalize(uCamPos-E), uB.y));
   float ang=acos(clamp(dot(n,g),-1.,1.));
-  float lidShade=1.-.55*smoothstep(aper*.45,aper,abs(fy));
-  vec3 col=vec3(.95,.86,.72)*lidShade*(.6+.4*max(dot(n,normalize(uCamPos-E)),0.));
-  float vein=pow(abs(sin(atan(dot(n,cross(g,u0)),dot(n,u0))*14.+ang*9.)),40.)*smoothstep(.3,.6,ang)*.25; col-=vec3(.2,.35,.4)*vein;
-  float irisA=0.42, pupA=0.17;
-  if(ang<irisA){ vec3 ax=normalize(cross(g,vec3(0,1,0))), ay=cross(ax,g); float a=atan(dot(n,ay),dot(n,ax));
-    float r=(ang-pupA)/(irisA-pupA);                                   // 0 at pupil edge, 1 at limbus
-    vec2 pc=vec2(cos(a),sin(a));
-    float fibers=fbm(vec3(pc*3.,r*1.2)*vec3(1.,1.,1.)+vec3(a*0.,0.,0.)), fine=noise(vec3(a*90.,r*14.,1.7));
-    float streak=pow(abs(sin(a*38.+fibers*6.)),3.)*.5+pow(abs(sin(a*113.+fine*3.)),8.)*.35;
-    float crypt=smoothstep(.62,.8,fbm(vec3(pc*7.,r*5.+3.)))*smoothstep(.15,.4,r)*smoothstep(.85,.55,r);
-    float collar=exp(-pow((r-.32)/.06,2.));
-    vec3 deep=vec3(.55,.22,.04), mid=vec3(2.2,1.15,.32), pale=vec3(4.2,2.7,1.);
-    vec3 ic=mix(mid, deep, smoothstep(.35,1.,r)) + pale*streak*(1.-r*.6);
-    ic=mix(ic, deep*.35, crypt*.75); ic+=pale*collar*.6;
-    ic*=.82+.36*fibers;
-    ic*=1.-.85*smoothstep(.8,1.,r);                                     // dark limbal ring
-    ic=mix(ic, vec3(.05,.02,.01), smoothstep(.06,0.,r)*.8);              // pupillary ruff
-    col=ic; }
-  if(ang<pupA){ col=vec3(.0008)+skyCol(reflect(rd,n))*.18; }
-  // wet cornea: a soft window highlight and a rim of reflected sky
-  vec3 rf=reflect(rd,n); col+=vec3(1.1,1.,.9)*smoothstep(.985,.995,dot(rf,normalize(vec3(-.35,.8,-.45))))*1.6;
-  col+=skyCol(rf)*.25*smoothstep(.2,.42,ang);
-  vec3 hdir=normalize(L-rd); col+=vec3(5.)*pow(max(dot(n,hdir),0.),400.);
-  return col*lidShade; }
-// March the rings inside the bounding sphere; returns hit flag, colour, distance; accumulates the core glow.
+  vec3 ax=normalize(cross(g,u0)), ay=cross(ax,g); float a=atan(dot(n,ay),dot(n,ax)); vec2 pc=vec2(cos(a),sin(a));
+  float lidOcc=smoothstep(0.,max(aper*.6,.01),aper-abs(fy));
+  float vsF=1.-smoothstep(.002,.008,pf);
+  float vs=pow(1.-abs(2.*noise(vec3(pc*3.,ang*7.)+.7*noise(vec3(pc*9.,ang*18.+4.)))-1.),14.)*smoothstep(.55,1.15,ang);
+  vec3 Lk=normalize(u0*.8+normalize(uCamPos-E)*.6+r0*.25);
+  float shade=.3+.7*max(dot(n,Lk),0.);
+  float corner=smoothstep(.35,.85,abs(fx));
+  vec3 scl=mix(vec3(.5,.43,.35), vec3(.72,.64,.53), smoothstep(1.2,.5,ang))*(.86+.14*fbm(n*14.));
+  scl=mix(scl, vec3(.56,.3,.26), corner*.45);
+  scl=mix(scl, vec3(.5,.17,.12), vs*.6*vsF);
+  vec3 col=scl*shade*(.16+.84*lidOcc)*.42*glowIn;
+  float irisA=.42, pupA=.2;
+  if(ang<irisA+.03){
+    float r=(ang-pupA)/(irisA-pupA);
+    float da=pf/max(sin(ang),.03);
+    float w1=1.-smoothstep(.25,.6,da*7.2), w2=1.-smoothstep(.25,.6,da*22.), w3=1.-smoothstep(.25,.6,da*67.);
+    float fib=.5+(noise(vec3(pc*7.2,r*2.5))-.5)*1.1*w1+(noise(vec3(pc*22.,r*5.+3.))-.5)*.8*w2+(noise(vec3(pc*67.,r*9.+7.))-.5)*.6*w3;
+    float cr=exp(-pow((r-.34-.05*(noise(vec3(pc*8.,1.))-.5))/.045,2.));
+    float crypt=smoothstep(.66,.8,noise(vec3(pc*9.,r*4.+3.)))*smoothstep(.12,.3,r)*smoothstep(.8,.5,r);
+    float fur=pow(.5+.5*sin(r*46.+noise(vec3(pc*5.,2.))*4.),6.)*smoothstep(.55,.9,r)*(1.-smoothstep(.2,.5,pf*46./(irisA-pupA)));
+    vec3 inner=vec3(1.9,1.1,.32), outer=vec3(.75,.33,.08), deep=vec3(.16,.06,.015);
+    vec3 ic=mix(inner, outer, smoothstep(.15,.8,r))*(.4+1.2*(fib-.5)+.6);
+    ic=mix(ic, deep, crypt*.75); ic+=vec3(2.,1.3,.5)*cr*.35; ic*=1.-.4*fur;
+    ic*=1.-.9*smoothstep(.76,1.02,r);
+    ic=mix(ic, vec3(.03,.012,.005), smoothstep(.07,0.,r)*.9);
+    col=mix(col, ic*(.6+.4*shade)*(.35+.65*lidOcc)*glowIn, smoothstep(irisA+.02, irisA-.01, ang));
+  }
+  if(ang<pupA) col=vec3(.0006)+skyCol(reflect(rd,n))*.08;
+  float fres=.03+.97*pow(1.-max(dot(n,V),0.),5.);
+  col=col*(1.-fres*.5)+envE(reflect(rd,n))*(fres*1.6+.035);
+  col+=vec3(1.2,1.,.8)*exp(-pow((aper-abs(fy))/max(.004,pf*1.5),2.))*.18*glowIn;
+  col+=vec3(2.6,1.8,.95)*wake*(.6+.4*smoothstep(aper,0.,abs(fy)));
+  return col; }
+// March the bands inside the bounding sphere; returns hit flag, colour, distance; accumulates the core glow.
 bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, out vec3 ent, out float tEnt, inout float glowAcc){
   ent=vec3(0); tEnt=1e9; vec3 oc=ro-E; float b=dot(oc,rd), c=dot(oc,oc)-pow(2.9*S,2.), h=b*b-c; if(h<=0.) return false;
   float t0=max(-b-sqrt(h),0.), t1=-b+sqrt(h); float t=t0; int id; vec3 lp; bool hit=false;
-  for(int i=0;i<110;i++){ vec3 p=(ro+rd*t-E)/S; float d=mapE(p,id,lp)*S; float wy=ro.y+rd.y*t; if(wy<gClipY) d=max(d,(gClipY-wy)*.7); if(t<tEye) glowAcc+=exp(-max(length(p)-0.66,0.)*22.)*0.0015;
-    if(d<0.0007*t){ hit=true; tEnt=t; break; } t+=max(d*0.85, 0.0004*t); if(t>t1 || t>tEye) break; }
+  for(int i=0;i<150;i++){ vec3 p=(ro+rd*t-E)/S; float d=mapE(p,id,lp)*S; float wy=ro.y+rd.y*t; if(wy<gClipY) d=max(d,(gClipY-wy)*.7); if(t<tEye) glowAcc+=exp(-max(length(p)-0.66,0.)*22.)*0.0015;
+    if(d<0.0005*t){ hit=true; tEnt=t; break; } t+=max(d*0.85, 0.0003*t); if(t>t1 || t>tEye) break; }
   if(!hit) return false;
   vec3 p=(ro+rd*tEnt-E)/S; vec3 n=calcN(p);
-  vec3 Lc=normalize(-p); float diff=max(dot(n,Lc),0.); float fres=pow(1.-max(dot(n,-rd),0.),3.);
-  float th=atan(lp.z,lp.x); vec3 radial=normalize(vec3(lp.x,0.,lp.z)); vec3 v=lp-radial*ringR(id); float ph=atan(v.y,dot(v,radial));
-  float bands=.75+.25*smoothstep(.0,.15,abs(sin(ph*5.)))*(.85+.15*sin(th*220.));
-  vec3 gold=vec3(.86,.56,.22)*bands;
-  vec3 hc=normalize(Lc-rd); float specC=pow(max(dot(n,hc),0.),90.);
-  vec3 Lm=normalize(vec3(.3,1.,.2)); float specM=pow(max(dot(n,normalize(Lm-rd)),0.),40.);
-  ent=gold*(diff*1.1+.015) + vec3(1.,.82,.55)*specC*3.5 + vec3(.7,.75,.9)*specM*.35 + vec3(1.,.8,.5)*fres*.25;
-  float lights=smoothstep(.5,1.,sin(th*ringR(id)*260.)*sin(ph*3.+1.))*step(.3,abs(ph)); ent+=vec3(2.4,1.7,1.)*pow(lights,8.)*(.6+.4*sin(uTime*2.+th*90.));
-  float isEye; vec3 camL=uRing[id]*((uCamPos-E)/S); vec3 ec=ringEye(lp,id,camL,isEye); if(isEye>.5) ent=ec*(.6+.6*diff);
+  mat3 M=uRing[id]; vec3 nL=M*n;
+  float rr=length(lp.xz); vec3 radial=vec3(lp.x,0.,lp.z)/max(rr,1e-4);
+  float face=dot(nL,radial);
+  float th=atan(lp.z,lp.x), R=ringR(id), w=ringW(id), ay=abs(lp.y);
+  float pfE=tEnt/(uFov*uRes.y)/S, lw=max(.0011,pfE*1.1);
+  float deg=th*57.29578;
+  float groove=exp(-pow((ay-w*.7)/lw,2.))+.8*exp(-pow((ay-w*.92)/lw,2.));
+  float d1=abs(fract(deg+.5)-.5)/57.29578*R, d5=abs(fract(deg/5.+.5)-.5)*5./57.29578*R;
+  float side=step(0.,lp.y);
+  float tick=(exp(-pow(d1/lw,2.))*step(w*.74,ay)*step(ay,w*.8)+exp(-pow(d5/lw,2.))*step(w*.74,ay)*step(ay,w*.86))*side;
+  float engr=clamp(groove*.7+tick*.8,0.,1.)*(1.-smoothstep(.002,.007,pfE))*step(.7,abs(face));
+  float ham=.88+.24*noise(vec3(th*R*180.,lp.y*180.,float(id)*3.));
+  vec3 metal=mix(vec3(.30,.18,.09), vec3(.80,.55,.24), .55+.45*noise(vec3(th*R*9.,lp.y*20.,float(id))))*ham*(1.-.65*engr);
+  vec3 V=-rd, Lc=normalize(-p);
+  float diff=max(dot(n,Lc),0.), lit=clamp(uA.z*.5,.4,1.4)/(1.+dot(p,p)*.08), fres=.04+.96*pow(1.-max(dot(n,V),0.),5.);
+  vec3 tWd=transpose(M)*normalize(vec3(-lp.z,0.,lp.x));
+  vec3 hc=normalize(Lc+V); float tH=dot(tWd,hc); float aniso=pow(sqrt(max(1.-tH*tH,0.)),160.)*smoothstep(0.,.2,dot(n,Lc));
+  ent=metal*(diff*.16*lit+.002) + metal*aniso*2.2*lit*(1.-.6*engr) + metal*envE(reflect(rd,n))*(.12+fres*1.6) + metal*fres*.06*lit;
+  float isEye; vec3 camL=M*((uCamPos-E)/S); vec3 ec=ringEye(lp,id,camL,face,isEye);
+  if(isEye>.75) ent=ec*(.75+.5*diff); else if(isEye>.25) ent*=.45;
   return true; }
 `;
 

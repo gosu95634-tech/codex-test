@@ -57,7 +57,7 @@ function eDescent() { return { E: E_SKY }; }
 const E_LOW = [0, 4200, 6500];                                           // above the valley, seen from the people
 const SOCK_DOWN = norm(sub([0, 0, -200], E_SKY));                         // before it finds you, it watches the valley
 const SOCK_CROWD = norm(sub([0, 1.7, -150], E_LOW));
-const RING_PHASE = 383.55;
+const RING_PHASE = 385.05;                                                // searched: no band crosses the line to the pupil during the dive (17–26.9 s)
 // Monotone-ish Catmull-Rom through [time, value] keys.
 function keys(K, t) {
   if (t <= K[0][0]) return K[0][1]; if (t >= K[K.length - 1][0]) return K[K.length - 1][1];

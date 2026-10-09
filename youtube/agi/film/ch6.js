@@ -11,9 +11,8 @@
 //        12–30  end screen (question at the top, two empty boxes for YouTube), fade to black at 28–30
 (() => {
   // ---------------------------------------------------------------- shader
-  // Ring eyes close one by one instead of all at once.
-  const ENT6 = ENTITY.replace("eh=0.03*uA.y;", "eh=0.03*clamp(uA.y*1.8-.8*hash12(vec2(k*1.37+float(id)*7.1,float(id)*3.3)),0.,1.);");
-  if (ENT6 === ENTITY) throw new Error("ch6: ENTITY patch failed");
+  // The ring eyes already open and close one by one in ENTITY itself (each at its own moment on uA.y).
+  const ENT6 = ENTITY;
 
   // uA: eyeOpen, ringEyesOpen, coreGlow, -   uB: -, gaze, -, -   uC: being pos xyz, scale
   // uD: dawn (0 night .. 1 dawn), star amount, quality (0 preview .. 1 final), flow time (s)

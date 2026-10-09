@@ -2,8 +2,8 @@
 //  0–6   chapter card over a golden spiral already turning (continues ch4's spiral beyond the doors)
 //  6–30  the self-improvement spiral: a logarithmic golden spiral of fire and stars, tighter, brighter, faster
 // 30–50  from a glade in a night forest, the flight up the marble staircase of intelligence, past 「아인슈타인」, into white light
-// 50–60  cut from white (organ tutti): ASI, the eye-ringed being, hangs above the limb of the world
-// 55.6–64 the great eye wakes: a slit of light, then the lid heaves higher on each heartbeat of the silence (60–64)
+// 50–60  cut from white (organ tutti): low over the night side of the Earth at hundreds of km/s; ASI rises over the limb
+// 55.2–64.7 the great eye wakes: a slit of light, one long smooth opening, one slow blink in the silence (60–64)
 // 64–70  the great eye turns and looks at us; fade to black
 (() => {
   const TAU = Math.PI * 2;
@@ -351,158 +351,270 @@ void main(){
   }
 
   // =====================================================================================================
-  // C. THE MANIFESTATION. The being from the cold open (rings of eyes around a great eye) hangs over the limb of
-  // a night-side planet (radius 6371, centre at origin). Its rings span four planet radii. Ring eyes open one by one
-  // on the uA.y ramp; the great eye opens on uA.x; gaze uB.y turns every eye to the camera.
+  // C. THE MANIFESTATION. Out of the white we are low over the night side of the Earth (radius 6371 km, centre at the
+  // origin), rushing toward the dawn limb at hundreds of km/s: city lights and clouds stream beneath us. Beyond the
+  // limb the being rises: a great eye 10,000 km across inside rings of eyes 40,000 km across. However fast we fly, it
+  // hardly moves in the frame; that contrast is its size. Its eye opens in one long, smooth motion, blinks once,
+  // slowly, and turns to us.
   // uA: eyeOpen, ringEyesOpen, core, -   uB: ringLight, gaze, -, pupil constriction   uC: entity xyz, scale
-  // uD: planet light, city lights, quality, scene clock   uLook: rest gaze   uSock: socket direction
+  // uD: planet light, city lights, quality, scene clock   uLook: rest gaze   uSock: socket direction   uEyeUp: lid frame up
+  // uAnchor: origin (km) for the surface noise, on the flight path, so the finest octaves stay precise
   const ENT5 = `
-uniform mat3 uRing[6]; uniform vec3 uSock; uniform vec3 uLook;
+uniform mat3 uRing[6]; uniform vec3 uSock; uniform vec3 uLook; uniform vec3 uEyeUp;
 const int NR=6;
-const float EW=.1, EH=.04;
-float sdTorus(vec3 p, vec2 t){ vec2 q=vec2(length(p.xz)-t.x,p.y); return length(q)-t.y; }
+const float EW=.1, EH=.04, RPL=6371., BT=.0075;
+vec3 hash33(vec3 p3){ p3=fract(p3*vec3(.1031,.1030,.0973)); p3+=dot(p3,p3.yxz+33.33); return fract((p3.xxy+p3.yxx)*p3.zyx)*2.-1.; }
+float gnoise(vec3 p){ vec3 i=floor(p), f=fract(p), u=f*f*f*(f*(f*6.-15.)+10.);
+  float a=dot(hash33(i),f), b=dot(hash33(i+vec3(1,0,0)),f-vec3(1,0,0)), c=dot(hash33(i+vec3(0,1,0)),f-vec3(0,1,0)), d=dot(hash33(i+vec3(1,1,0)),f-vec3(1,1,0));
+  float e=dot(hash33(i+vec3(0,0,1)),f-vec3(0,0,1)), g=dot(hash33(i+vec3(1,0,1)),f-vec3(1,0,1)), h=dot(hash33(i+vec3(0,1,1)),f-vec3(0,1,1)), k=dot(hash33(i+vec3(1,1,1)),f-vec3(1,1,1));
+  return mix(mix(mix(a,b,u.x),mix(c,d,u.x),u.y),mix(mix(e,g,u.x),mix(h,k,u.x),u.y),u.z); }
 float ringR(int i){ return 1.05+float(i)*0.3; }
-float ringr(int i){ return 0.03+float(i)*0.004; }
+float ringW(int i){ return .052+float(i)*.006; }
+// a ring of the being: a band of metal like the hoop of an armillary sphere, BT thick, 2·ringW wide, edges bevelled
+float sdBand(vec3 q, float R, float w){ vec2 d=abs(vec2(length(q.xz)-R, q.y))-vec2(BT,w); return min(max(d.x,d.y),0.)+length(max(d,0.))-.002; }
 float mapE(vec3 p, out int id, out vec3 lp){ float d=1e9; id=-1;
-  for(int i=0;i<NR;i++){ vec3 q=uRing[i]*p; float di=sdTorus(q, vec2(ringR(i), ringr(i))); if(di<d){ d=di; id=i; lp=q; } }
+  for(int i=0;i<NR;i++){ vec3 q=uRing[i]*p; float di=sdBand(q, ringR(i), ringW(i)); if(di<d){ d=di; id=i; lp=q; } }
   return d; }
-vec3 calcN(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=0.0015; int i2; vec3 l2;
+vec3 calcN(vec3 p){ const vec2 k=vec2(1.,-1.); const float h=0.001; int i2; vec3 l2;
   return normalize(k.xyy*mapE(p+k.xyy*h,i2,l2)+k.yyx*mapE(p+k.yyx*h,i2,l2)+k.yxy*mapE(p+k.yxy*h,i2,l2)+k.xxx*mapE(p+k.xxx*h,i2,l2)); }
 vec3 spaceCol(vec3 rd){ return stars(rd,.8)+nebula(rd, vec3(.018,.014,.035), vec3(.12,.075,.03))*.5; }
-// one eye on a ring; isEye: 1 = eye, .5 = sleeping crease, 0 = gold
-vec3 ringEye(vec3 lp, int id, vec3 camL, out float isEye){
-  isEye=0.; float R=ringR(id), r=ringr(id);
-  float th=atan(lp.z,lp.x); vec3 radial=normalize(vec3(lp.x,0.,lp.z)); vec3 v=lp-radial*R; float ph=atan(v.y, dot(v,radial));
+// what the being's polished surfaces mirror: the night planet with its lit crescent and thin air, and space
+vec3 envRefl(vec3 ro, vec3 rd, vec3 E){
+  float b=dot(ro,rd), cc=dot(ro,ro)-RPL*RPL, h=b*b-cc;
+  if(h>0. && -b-sqrt(h)>0.){ vec3 p=ro+rd*(-b-sqrt(h)), n=normalize(p); float mu=dot(n,normalize(E-p));
+    float lit=smoothstep(-.15,.25,mu);
+    float lights=smoothstep(.62,.8,noise(n*70.))*smoothstep(.4,.7,noise(n*9.))*(1.-lit);
+    return vec3(.004,.006,.012)+vec3(.6,.45,.32)*lit*max(mu+.1,0.)*.6*uD.x+vec3(1.,.55,.2)*lights*.5
+           +vec3(.3,.5,1.)*pow(1.-max(dot(n,-rd),0.),4.)*.25*lit; }
+  float tc=-b; vec3 pc=ro+rd*max(tc,0.); float hc=length(pc)-RPL;
+  vec3 c=spaceCol(rd)*.6;
+  if(tc>0.) c+=vec3(.4,.6,1.)*exp(-max(hc,0.)/25.)*.35*smoothstep(-.3,.2,dot(normalize(pc),normalize(E-pc)));
+  return c; }
+// one eye set into the outer face of a band; isEye: 1 = eye, .5 = its closed lid and bezel, 0 = metal
+vec3 ringEye(vec3 lp, int id, vec3 camL, float face, out float isEye){
+  isEye=0.; if(face<.7) return vec3(0);
+  float R=ringR(id), th=atan(lp.z,lp.x);
   float N=floor(9.+float(id)*4.); float cell=6.2831853/N; float k=floor(th/cell+.5); float u=(th-k*cell)*R;
   float kk=mod(k+N,N); float h=hash12(vec2(kk*1.37+3.1, float(id)*7.3+1.9));
   float o0=(float(id)+h*2.4)/7.6*.88; float op=smoothstep(o0,o0+.12,uA.y);
-  float w=ph*r; float e=1.-(u*u)/(EW*EW); if(e<=0.||abs(ph)>1.45) return vec3(0);
-  float lid=EH*e*op;
-  if(abs(w)>lid){ if(abs(w)<lid+.0035*e+.001) { isEye=.5; } return vec3(0); }
+  float bt=uD.w-58.5-h*9.; op*=1.-.9*smoothstep(0.,.45,bt)*(1.-smoothstep(.6,1.4,bt));      // each eye blinks once, slowly, at its own time
+  float eh=min(EH, ringW(id)*.75), w=lp.y, e=1.-(u*u)/(EW*EW); if(e<=0.) return vec3(0);
+  float lid=eh*e*op;
+  if(abs(w)>lid){ if(abs(w)<eh*e+.004) isEye=.5; return vec3(0); }
   isEye=1.; float sc=EW/.07;
   vec3 tU=normalize(vec3(-lp.z,0.,lp.x)), tW=vec3(0,1,0); vec3 toCam=normalize(camL-lp);
   vec2 lk=vec2(dot(toCam,tU), dot(toCam,tW))*0.026*sc*uB.y + vec2(sin(k*1.7+float(id))*.012, cos(k*2.3)*.006)*sc*(1.-uB.y);
   vec2 q=vec2(u,w)-lk; float d=length(q);
-  vec3 c=vec3(1.05,.98,.88)*(.55+.45*smoothstep(lid,0.,abs(w)));
+  vec3 c=vec3(.62,.56,.48)*(.45+.55*smoothstep(lid,0.,abs(w)));
   float ir=.021*sc, pr=.008*sc*(1.-.25*uB.y);
-  if(d<ir) c=mix(vec3(2.6,1.5,.5), vec3(.8,.36,.07), d/ir)*(.8+.2*sin(atan(q.y,q.x)*18.));
+  if(d<ir){ float aa=atan(q.y,q.x); c=mix(vec3(2.,1.15,.38), vec3(.6,.26,.05), d/ir)*(.7+.3*noise(vec3(cos(aa)*7.,sin(aa)*7.,d/ir*3.))); }
   if(d<pr) c=vec3(.002);
-  if(length(q-vec2(-.3,.35)*ir)<.18*ir) c=vec3(3.);
-  c+=vec3(1.4,1.,.55)*exp(-pow((op-.45)/.22,2.))*1.2;            // light spills from each eye as it opens
+  if(length(q-vec2(-.3,.35)*ir)<.16*ir) c=vec3(1.8);
+  c+=vec3(1.4,1.,.55)*exp(-pow((op-.45)/.22,2.))*step(uD.w,60.);  // light spills from each eye as it first opens
   return c*(.3+.7*smoothstep(0.,.6,op)); }
-vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, out float tHit){
+// relief of the being's body: ridged fBm on the unit sphere, and thin fissures at every scale (fis)
+float bodyH(vec3 n, float pf, out float fis){
+  float s=0., a=.5, f=2.3; fis=0.;
+  for(int i=0;i<7;i++){ float w=1.-smoothstep(.15,.45,pf*f); if(w<=0.) break;
+    float g=gnoise(n*f+vec3(float(i)*3.7,1.3,-2.1)); float r=1.-abs(g)*2.2; s+=a*w*r*abs(r);
+    if(i>0 && i<3){ vec3 nw=n*f*1.3+vec3(11.3,float(i)*5.9,7.7); nw+=.35*vec3(gnoise(nw*2.1),gnoise(nw*2.1+4.),gnoise(nw*2.1+9.));
+      fis+=w*a*2.5*smoothstep(.984,.998,1.-abs(gnoise(nw))); }
+    a*=.5; f*=2.13; }
+  return s; }
+// The great eye: a dark world (the being's body, its lids) parting around a living eyeball. The upper lid travels further
+// than the lower and the opening is widest at the centre. pf = size of a pixel in eye radii; every fine detail fades by it.
+vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, float pxa, out float tHit){
   tHit=1e9; float R=0.66*S; vec3 oc=ro-E; float b=dot(oc,rd), c=dot(oc,oc)-R*R, h=b*b-c; if(h<0.) return vec3(-1.);
   tHit=-b-sqrt(h); vec3 p=ro+rd*tHit, n=normalize(p-E);
+  float pf=tHit*pxa/R;
   vec3 f0=normalize(uSock);
-  vec3 r0=normalize(cross(vec3(0,1,0),f0)), u0=cross(f0,r0);
+  vec3 r0=normalize(cross(uEyeUp,f0)), u0=cross(f0,r0);
   float fx=dot(n,r0), fy=dot(n,u0), ff=dot(n,f0);
-  // lids: the centre parts first and the corners follow; the upper lid travels further than the lower;
-  // a faint tremor runs along the lid edge while it is still heavy
-  float open=uA.x, prof=pow(max(1.-fx*fx/0.7,0.), mix(1.6,.75,smoothstep(0.,.6,open)));
-  float trem=.006*open*(1.-open)*sin(fx*21.+uD.w*7.3)*sin(uD.w*3.1+fx*5.);
-  float aperU=max(0.52*open*prof+trem,0.), aperL=0.36*open*prof;
-  float aper=fy>0.? aperU : aperL;
-  vec3 L=normalize(vec3(0.,1.,0.));
-  float lon=atan(fy,fx), lat=acos(clamp(ff,-1.,1.));
-  float eng=exp(-pow(sin(lon*12.)*max(sin(lat),.08)/.012,2.))*smoothstep(.15,.5,lat) + exp(-pow(sin(lat*10.)/.03,2.))*.6;
-  float rimV=pow(1.-max(dot(n,-rd),0.),3.);
-  vec3 shell=vec3(.006,.0055,.008) + spaceCol(reflect(rd,n))*.35 + vec3(1.,.72,.36)*eng*.035*(.4+.6*uB.x) + vec3(1.,.72,.4)*rimV*.45*(.4+.6*uB.x);
-  float seam=max(aper,.0015);
-  float wake=smoothstep(0.,.03,open)*(1.-smoothstep(.08,.5,open));          // light pours out of the first slit
-  float lidLine=smoothstep(.014,0.,abs(abs(fy)-seam))*smoothstep(.2,.35,ff)*smoothstep(.86,.6,abs(fx));
-  shell+=vec3(1.5,1.,.5)*lidLine*(.35+.9*smoothstep(.0,.15,open)+2.5*wake)*(1.-smoothstep(.6,1.,open)*.5);
-  if(ff<0.25 || fy>aperU || fy<-aperL) return shell;
+  float open=uA.x, prof=pow(max(1.-fx*fx/.7,0.),.75);
+  float rag=1.+.07*gnoise(vec3(fx*7.,fy>0.? 1.:-1.,2.))+.03*gnoise(vec3(fx*23.,fy>0.? 3.:-3.,5.));   // the lid margins are rock, not a drawn line
+  float aperU=.52*open*prof*rag, aperL=.36*open*prof*rag, aper=fy>0.? aperU : aperL;
+  vec3 V=-rd;
+  float glowIn=.25+.75*smoothstep(0.,.25,open);
+  float wake=smoothstep(0.,.03,open)*(1.-smoothstep(.08,.5,open));              // light pours from the first slit
+  // --- the body: dark basalt and old metal, mountain ridges, fissures glowing with the light inside it
+  float fis, fis1, fis2;
+  float dl=max(.003,pf*1.5);
+  vec3 t1=normalize(cross(n,f0+vec3(.01,.02,.03))), t2=cross(n,t1);
+  float h0=bodyH(n,pf,fis), h1=bodyH(normalize(n+t1*dl),pf,fis1), h2=bodyH(normalize(n+t2*dl),pf,fis2);
+  vec3 nb=normalize(n-(t1*(h1-h0)+t2*(h2-h0))*(.04/dl));
+  vec3 Lo=E+f0*R*.8, toO=Lo-p; float dO=length(toO)/R; toO=normalize(toO);
+  float spill=(.9*smoothstep(0.,.25,open)+2.*wake)*(.4+.6*uB.x)/(1.+dO*dO*4.);   // light from the opening across the ground
+  vec3 Le=normalize(-E);                                                           // the Earth, in front of and below it
+  vec3 albB=mix(vec3(.025,.023,.021), vec3(.085,.07,.056), smoothstep(-.1,.5,h0));
+  vec3 shell=albB*(vec3(1.,.7,.4)*max(dot(nb,toO),0.)*spill*6. + vec3(.3,.38,.5)*max(dot(nb,Le),0.)*1.2 + .012);
+  float fb=.04+.96*pow(1.-max(dot(nb,V),0.),5.);
+  shell+=envRefl(p,reflect(rd,nb),E)*fb*.5;
+  shell+=vec3(1.5,.85,.32)*min(fis,1.)*.5*exp(-dO*2.6)*smoothstep(0.,.3,open)*(.4+.6*uB.x);   // rifts near the eye glow from inside
+  shell+=vec3(1.,.72,.4)*pow(1.-max(dot(n,V),0.),3.)*.3*(.4+.6*uB.x);           // light wrapping round from behind it
+  float de=abs(fy)-aper;                                                          // > 0 on the lid
+  float edgeMask=smoothstep(.86,.6,abs(fx))*smoothstep(.2,.35,ff);
+  float cliff=smoothstep(.05,0.,de)*step(0.,de)*edgeMask;                         // the inner wall of the lid, lit by the eye
+  shell=mix(shell, vec3(1.2,.75,.38)*(.05+.1*smoothstep(.05,0.,de))*glowIn*(.3+.7*uB.x), cliff*.7);
+  float seam=exp(-pow(de/max(.004,pf*1.2),2.))*edgeMask;
+  shell+=vec3(1.6,1.1,.55)*seam*(.08+1.4*smoothstep(0.,.06,open)*(1.-smoothstep(.3,.9,open))+2.5*wake)*(.5+.5*uB.x);
+  if(ff<.25 || fy>aperU || fy<-aperL) return shell;
+  // --- the eyeball
   vec3 g=normalize(mix(normalize(uLook), normalize(uCamPos-E), uB.y));
   float ang=acos(clamp(dot(n,g),-1.,1.));
-  float lidShade=1.-.7*smoothstep(aper*.3,aper,abs(fy));
-  // the white of the eye: not paper white but a wet, ivory globe, darker toward the lids, faintly mottled
-  vec3 scl=mix(vec3(.25,.21,.17), vec3(.52,.46,.38), smoothstep(1.15,.45,ang))*(.84+.16*fbm(n*9.+3.));
-  vec3 col=scl*lidShade*(.55+.45*max(dot(n,normalize(uCamPos-E)),0.));
-  float vein=pow(abs(sin(atan(dot(n,cross(g,u0)),dot(n,u0))*14.+ang*9.)),40.)*smoothstep(.3,.6,ang)*.25; col-=vec3(.12,.2,.24)*vein;
-  float irisA=0.42, pupA=mix(.26,.17,uB.w);                                  // the pupil tightens as the light reaches it
-  if(ang<irisA){ vec3 ax=normalize(cross(g,vec3(0,1,0))), ay=cross(ax,g); float a=atan(dot(n,ay),dot(n,ax));
-    float r=(ang-pupA)/(irisA-pupA); vec2 pc=vec2(cos(a),sin(a));
-    float fibers=fbm(vec3(pc*3.,r*1.2)), fine=noise(vec3(a*90.,r*14.,1.7));
-    float streak=pow(abs(sin(a*38.+fibers*6.)),3.)*.5+pow(abs(sin(a*113.+fine*3.)),8.)*.35;
-    float crypt=smoothstep(.62,.8,fbm(vec3(pc*7.,r*5.+3.)))*smoothstep(.15,.4,r)*smoothstep(.85,.55,r);
-    float collar=exp(-pow((r-.32)/.06,2.));
-    vec3 deep=vec3(.55,.22,.04), mid=vec3(2.2,1.15,.32), pale=vec3(4.2,2.7,1.);
-    vec3 ic=mix(mid, deep, smoothstep(.35,1.,r)) + pale*streak*(1.-r*.6);
-    ic=mix(ic, deep*.35, crypt*.75); ic+=pale*collar*.6; ic*=.82+.36*fibers;
-    ic*=1.-.85*smoothstep(.8,1.,r); ic=mix(ic, vec3(.05,.02,.01), smoothstep(.06,0.,r)*.8);
-    col=ic*.55; }
-  if(ang<pupA){ col=vec3(.0008)+spaceCol(reflect(rd,n))*.15; }
-  vec3 rf=reflect(rd,n); col+=vec3(1.1,1.,.9)*smoothstep(.985,.995,dot(rf,normalize(vec3(-.35,.8,-.45))))*1.6;
-  col+=spaceCol(rf)*.25*smoothstep(.2,.42,ang);
-  vec3 hdir=normalize(L-rd); col+=vec3(5.)*pow(max(dot(n,hdir),0.),400.);
-  col+=vec3(2.6,1.8,.95)*wake*(.6+.4*smoothstep(aper,0.,abs(fy)));          // the inner light, before the eye can be seen
-  return col*lidShade; }
-bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, out vec3 ent, out float tEnt){
+  vec3 ax=normalize(cross(g,u0)), ay=cross(ax,g); float a=atan(dot(n,ay),dot(n,ax)); vec2 pc=vec2(cos(a),sin(a));
+  float lidOcc=smoothstep(0.,max(aper*.6,.01),aper-abs(fy));                    // the lids shade the globe near their edge
+  // sclera: wet ivory, warmer and darker toward the corners; fine vessels run in from the corners
+  float vsF=1.-smoothstep(.002,.008,pf);
+  float vs=pow(1.-abs(2.*noise(vec3(pc*3.,ang*7.)+.7*noise(vec3(pc*9.,ang*18.+4.)))-1.),14.)*smoothstep(.55,1.15,ang);
+  vec3 Lk=normalize(u0*.8+normalize(uCamPos-E)*.6+r0*.25);                       // a soft key from above: the globe reads round
+  float shade=.3+.7*max(dot(n,Lk),0.);
+  float corner=smoothstep(.35,.85,abs(fx));
+  vec3 scl=mix(vec3(.5,.43,.35), vec3(.72,.64,.53), smoothstep(1.2,.5,ang))*(.86+.14*fbm(n*14.));
+  scl=mix(scl, vec3(.56,.3,.26), corner*.45);                                      // warmer, pinker toward the corners
+  scl=mix(scl, vec3(.5,.17,.12), vs*.6*vsF);
+  vec3 col=scl*shade*(.16+.84*lidOcc)*.42*glowIn;
+  // iris: luminous stroma in three layers of radial fibres, a collarette, crypts, contraction furrows, a dark limbal ring
+  float irisA=.42, pupA=mix(.27,.16,uB.w);
+  if(ang<irisA+.03){
+    float r=(ang-pupA)/(irisA-pupA);
+    float da=pf/max(sin(ang),.03);                                               // angular size of a pixel here
+    float w1=1.-smoothstep(.25,.6,da*7.2), w2=1.-smoothstep(.25,.6,da*22.), w3=1.-smoothstep(.25,.6,da*67.);
+    float fib=.5+(noise(vec3(pc*7.2,r*2.5))-.5)*1.1*w1+(noise(vec3(pc*22.,r*5.+3.))-.5)*.8*w2+(noise(vec3(pc*67.,r*9.+7.))-.5)*.6*w3;
+    float cr=exp(-pow((r-.34-.05*(noise(vec3(pc*8.,1.))-.5))/.045,2.));
+    float crypt=smoothstep(.66,.8,noise(vec3(pc*9.,r*4.+3.)))*smoothstep(.12,.3,r)*smoothstep(.8,.5,r);
+    float fur=pow(.5+.5*sin(r*46.+noise(vec3(pc*5.,2.))*4.),6.)*smoothstep(.55,.9,r)*(1.-smoothstep(.2,.5,pf*46./(irisA-pupA)));
+    vec3 inner=vec3(1.9,1.1,.32), outer=vec3(.75,.33,.08), deep=vec3(.16,.06,.015);
+    vec3 ic=mix(inner, outer, smoothstep(.15,.8,r))*(.4+1.2*(fib-.5)+.6);
+    ic=mix(ic, deep, crypt*.75); ic+=vec3(2.,1.3,.5)*cr*.35; ic*=1.-.4*fur;
+    ic*=1.-.9*smoothstep(.76,1.02,r);
+    ic=mix(ic, vec3(.03,.012,.005), smoothstep(.07,0.,r)*.9);
+    col=mix(col, ic*(.6+.4*shade)*(.35+.65*lidOcc)*glowIn, smoothstep(irisA+.02, irisA-.01, ang));
+  }
+  if(ang<pupA) col=vec3(.0006)+spaceCol(reflect(rd,n))*.08;                      // the pupil: a way into the dark
+  // cornea: a clear wet dome over all of it, mirroring the world and the sky
+  float fres=.03+.97*pow(1.-max(dot(n,V),0.),5.);
+  vec3 envC=envRefl(p, reflect(rd,n), E);
+  col=col*(1.-fres*.5)+envC*(fres*1.6+.035);
+  col+=vec3(1.2,1.,.8)*exp(-pow((aper-abs(fy))/max(.004,pf*1.5),2.))*.18*glowIn;  // tear film along the lid edge
+  col+=vec3(2.6,1.8,.95)*wake*(.6+.4*smoothstep(aper,0.,abs(fy)));
+  return col; }
+bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, float pxa, out vec3 ent, out float tEnt){
   ent=vec3(0); tEnt=1e9; vec3 oc=ro-E; float b=dot(oc,rd), c=dot(oc,oc)-pow(2.9*S,2.), h=b*b-c; if(h<=0.) return false;
   float t0=max(-b-sqrt(h),0.), t1=-b+sqrt(h); float t=t0; int id; vec3 lp; bool hit=false;
-  for(int i=0;i<130;i++){ vec3 p=(ro+rd*t-E)/S; float d=mapE(p,id,lp)*S;
-    if(d<0.0006*t){ hit=true; tEnt=t; break; } t+=max(d*0.85, 0.0003*t); if(t>t1 || t>tEye) break; }
+  for(int i=0;i<160;i++){ vec3 p=(ro+rd*t-E)/S; float d=mapE(p,id,lp)*S;
+    if(d<0.0005*t){ hit=true; tEnt=t; break; } t+=max(d*0.85, 0.00025*t); if(t>t1 || t>tEye) break; }
   if(!hit) return false;
   vec3 p=(ro+rd*tEnt-E)/S; vec3 n=calcN(p);
-  vec3 Lc=normalize(-p); float diff=max(dot(n,Lc),0.); float fres=pow(1.-max(dot(n,-rd),0.),3.);
-  float th=atan(lp.z,lp.x); vec3 radial=normalize(vec3(lp.x,0.,lp.z)); vec3 v=lp-radial*ringR(id); float ph=atan(v.y,dot(v,radial));
-  float bands=.75+.25*smoothstep(.0,.15,abs(sin(ph*5.)))*(.85+.15*sin(th*220.));
-  vec3 gold=vec3(.86,.56,.22)*bands;
-  vec3 hc=normalize(Lc-rd); float specC=pow(max(dot(n,hc),0.),90.);
-  vec3 Lm=normalize(vec3(.3,1.,.2)); float specM=pow(max(dot(n,normalize(Lm-rd)),0.),40.);
-  vec3 toP=normalize(-E/S-p); float planet=max(dot(n,toP),0.);
-  float lit=uB.x/(1.+dot(p,p)*.08);
-  float groove=1.-.55*exp(-pow(sin(ph*2.)/.08,2.))*step(.35,abs(ph));
-  vec3 rfl=reflect(rd,n); float envC=pow(max(dot(rfl,Lc),0.),6.);
-  ent=gold*groove*(diff*.65*lit+.008) + vec3(1.,.8,.5)*specC*2.2*lit + gold*envC*.35*lit + vec3(.7,.75,.9)*specM*.12 + gold*fres*.18*(.4+.6*uB.x) + vec3(.2,.25,.4)*planet*.04;
-  float isEye; vec3 camL=uRing[id]*((uCamPos-E)/S); vec3 ec=ringEye(lp,id,camL,isEye);
-  if(isEye>.75) ent=ec*(.7+.6*diff); else if(isEye>.25) ent*=.35;
+  mat3 M=uRing[id]; vec3 nL=M*n;
+  float rr=length(lp.xz); vec3 radial=vec3(lp.x,0.,lp.z)/max(rr,1e-4);
+  float face=dot(nL,radial);                                                      // +1 outer face, -1 inner face, 0 on the edges
+  float th=atan(lp.z,lp.x), R=ringR(id), w=ringW(id), ay=abs(lp.y);
+  float pfE=tEnt*pxa/S, lw=max(.0011,pfE*1.1);
+  // engraving: grooves along the edges, a scale of graduations (every degree, longer every fifth), and the seams where
+  // the segments of the band are joined (every ten degrees). It fades out where it would be finer than a pixel.
+  float deg=th*57.29578;
+  float groove=exp(-pow((ay-w*.7)/lw,2.))+.8*exp(-pow((ay-w*.92)/lw,2.));
+  float d1=abs(fract(deg+.5)-.5)/57.29578*R, d5=abs(fract(deg/5.+.5)-.5)*5./57.29578*R, d10=abs(fract(deg/10.+.5)-.5)*10./57.29578*R;
+  float side=step(0.,lp.y);                                                        // the scale runs along one edge only
+  float tick=(exp(-pow(d1/lw,2.))*step(w*.74,ay)*step(ay,w*.8)+exp(-pow(d5/lw,2.))*step(w*.74,ay)*step(ay,w*.86))*side;
+  float engr=clamp(groove*.7+tick*.8,0.,1.)*(1.-smoothstep(.002,.007,pfE))*step(.7,abs(face));
+  float ham=.88+.24*noise(vec3(th*R*180.,lp.y*180.,float(id)*3.));
+  vec3 metal=mix(vec3(.30,.18,.09), vec3(.80,.55,.24), .55+.45*noise(vec3(th*R*9.,lp.y*20.,float(id))))*ham*(1.-.65*engr);
+  vec3 V=-rd, Lc=normalize(-p);
+  float diff=max(dot(n,Lc),0.), lit=uB.x/(1.+dot(p,p)*.08), fres=.04+.96*pow(1.-max(dot(n,V),0.),5.);
+  vec3 tWd=transpose(M)*normalize(vec3(-lp.z,0.,lp.x));                           // brushed along the band
+  vec3 hc=normalize(Lc+V); float tH=dot(tWd,hc); float aniso=pow(sqrt(max(1.-tH*tH,0.)),160.)*smoothstep(0.,.2,dot(n,Lc));
+  vec3 envW=envRefl(ro+rd*tEnt, reflect(rd,n), E);
+  float earthF=max(dot(n,normalize(-E)),0.);
+  // metal: little diffuse light, most of it in the brushed highlight and in what it mirrors
+  ent=metal*(diff*.16*lit+earthF*.03+.002) + metal*aniso*2.2*lit*(1.-.6*engr) + metal*envW*(.12+fres*1.6) + metal*fres*.06*uB.x;
+  float isEye; vec3 camL=M*((uCamPos-E)/S); vec3 ec=ringEye(lp,id,camL,face,isEye);
+  if(isEye>.75) ent=ec*(.75+.5*diff); else if(isEye>.25) ent*=.45;
   return true; }
 `;
-  SHADERS.ch5_orbit = COMMON + `uniform vec4 uD;\n` + ENT5 + `
+  SHADERS.ch5_orbit = COMMON + `uniform vec4 uD; uniform vec3 uAnchor;\n` + ENT5 + `
 const float RP=6371.;
-float lorSeg(vec3 o, vec3 d, float c, float t0, float t1){
-  float tc=-dot(o,d), m2=max(dot(o,o)-tc*tc,0.), k=sqrt(m2+c*c);
-  return (atan((t1-tc)/k)-atan((t0-tc)/k))/k; }
-vec3 planet(vec3 p, vec3 n, vec3 rd, vec3 E){
+const vec3 TAU0=vec3(.045,.10,.24);                    // vertical optical depth of the air (red, green, blue)
+// fBm in kilometres: first wavelength L0, n octaves; an octave finer than the pixel footprint fw (km) fades to its mean,
+// so nothing shimmers while the ground streams past
+float fbmK(vec3 q, float L0, int n, float fw, float gain){
+  float s=0., a=1., nrm=0., f=1./L0;
+  for(int i=0;i<13;i++){ if(i>=n) break; float w=1.-smoothstep(.25,.6,fw*f);
+    if(w>0.) s+=a*w*gnoise(q*f+vec3(float(i)*17.3,float(i)*5.1,float(i)*11.7));
+    nrm+=a; a*=gain; f*=2.03; }
+  return s/nrm*2.2; }
+float airmass(float c){ c=clamp(c,0.,1.); float z=acos(c)*57.29578; return 1./(c+.50572*pow(max(96.07995-z,.01),-1.6364)); }
+// The Earth from low orbit, mostly at night. p on the sphere, fw = pixel footprint in km. cl returns cloud cover.
+vec3 earth(vec3 p, vec3 n, vec3 rd, float fw, vec3 E, float S, out float cl){
+  vec3 q=p-uAnchor;
   vec3 Ld=normalize(E-p); float mu=dot(n,Ld);
-  vec3 q=n*2.2; float cont=fbm(q+vec3(4.1,1.3,7.7))*.75+.25*fbm(q*3.3+2.); float land=smoothstep(.5,.54,cont);
-  float cl=fbm(n*7.+vec3(uD.w*.003,0.,0.))*.7+fbm(n*19.)*.3; float cloud=smoothstep(.48,.72,cl);
-  vec3 ocean=vec3(.004,.008,.016), ground=mix(vec3(.05,.04,.028), vec3(.085,.07,.045), fbm(n*24.));
-  vec3 alb=mix(ocean,ground,land); alb=mix(alb, vec3(.62,.6,.58), cloud*.85);
-  vec3 lc=vec3(1.,.82,.58)*uD.x*.45;
-  vec3 c=alb*lc*smoothstep(-.02,.3,mu)*max(mu+.05,0.)*1.4;
-  c+=vec3(1.,.5,.18)*exp(-pow(mu/.06,2.))*.05*uD.x*(1.-cloud*.6);
-  vec3 rf=reflect(rd,n); float sp=max(dot(rf,Ld),0.);
-  c+=lc*(pow(sp,300.)*14.+pow(sp,30.)*.5)*(1.-land)*(1.-cloud)*smoothstep(-.06,.06,mu);
-  float night=1.-smoothstep(-.1,.04,mu);
-  float pop=smoothstep(.5,.78,fbm(n*13.+3.))*land;
-  vec3 cg=n*520.; vec3 ci=floor(cg); float h=hash13(ci); vec3 cf=fract(cg)-.5;
-  float dot1=smoothstep(.3,0.,length(cf-(vec3(hash13(ci+1.),hash13(ci+2.),hash13(ci+3.))-.5)*.5))*step(1.-pop*.9,h);
-  float sprawl=pop*pop*.25+pow(fbm(n*60.),3.)*pop*.6;
-  c+=vec3(1.,.6,.24)*(dot1*2.6+sprawl*1.4)*night*uD.y*(1.-cloud*.8);
-  c+=vec3(.0025,.003,.006);
+  float src=clamp(.66*S/length(E-p),.03,.35);
+  float lit=smoothstep(-src*.5,src,mu);                                    // a source this large casts a wide penumbra
+  float cont=fbmK(q+vec3(3100.,-900.,2000.),3000.,12,fw,.52)+.12*exp(-dot(q,q)/6.8e6);   // land under our path
+  float land=smoothstep(.03,.07,cont), coast=exp(-pow((cont-.05)/.06,2.));
+  // weather: large warped systems with fine billows, drifting
+  vec3 qc=q+vec3(uD.w*5.,0.,uD.w*2.);
+  vec3 wv=vec3(fbmK(qc,2600.,3,fw,.5), fbmK(qc+vec3(41.,7.,3.),2600.,3,fw,.5), fbmK(qc+vec3(9.,33.,17.),2600.,3,fw,.5));
+  float cd=fbmK(qc+wv*900.,1500.,12,fw,.56);
+  cl=smoothstep(0.,.42,cd-.06);
+  vec3 tL=normalize(Ld-n*mu+vec3(1e-4));
+  float cd2=fbmK(qc+wv*900.+tL*5.,1500.,12,fw,.56);
+  float relief=clamp((cd2-cd)*22.,-1.,1.);                                  // billow faces toward the light
+  vec3 sunT=mix(vec3(1.,.34,.1), vec3(1.,.86,.68), smoothstep(0.,.35,mu));
+  vec3 Lc=sunT*uD.x*.32*lit;                                                 // it lights the world like a strong moon, not a sun
+  float veg=fbmK(q+vec3(-700.,300.,90.),500.,9,fw,.55);
+  vec3 alb=mix(vec3(.008,.016,.03), mix(vec3(.05,.065,.035), vec3(.2,.16,.1), smoothstep(-.2,.4,veg)), land);
+  vec3 c=alb*Lc*max(mu+.08,0.)*(1.-cl*.9);
+  vec3 hv=normalize(Ld-rd); float sp=max(dot(n,hv),0.); float fr=.02+.98*pow(1.-max(dot(n,-rd),0.),5.);
+  c+=Lc*(pow(sp,140.)*3.5+pow(sp,16.)*.22)*fr*(1.-land)*(1.-cl);           // the glint of the being on the sea
+  float cLit=clamp(.55+.45*relief,0.,1.)*(.35+.65*smoothstep(-.1,.3,mu+.1));
+  c=mix(c, vec3(.78,.77,.75)*Lc*max(mu+.12,0.)*cLit*1.2, cl);
+  // night: city lights in coastal sprawl, towns, the faint threads of highways; cloud dims and spreads them
+  float night=1.-.6*smoothstep(-.05,.25,mu);
+  float pop=smoothstep(.05,.6,fbmK(q+vec3(55.,90.,-40.),900.,3,fw,.5)+.45*coast+.3*exp(-dot(q,q)/2.e6))*land;   // lights streaming beneath us
+  float metro=smoothstep(.55,1.,pop)*smoothstep(.2,.65,fbmK(q+vec3(12.,-8.,30.),45.,8,fw,.6));        // city cores, a few tens of km
+  float sub=smoothstep(.3,.8,pop)*smoothstep(.05,.55,fbmK(q+vec3(-31.,6.,2.),12.,6,fw,.6));          // grainy suburbs
+  float town=pow(smoothstep(.5,.9,fbmK(q+vec3(-3.,4.,7.),5.,5,fw,.6)+.45*pop-.25),2.);              // villages: scattered points
+  float hwW=.006+fw/90.; float hw=exp(-pow(gnoise(q/90.+vec3(3.,1.,2.))/hwW,2.))*(.006/hwW)*smoothstep(.1,.45,pop);
+  vec3 lights=vec3(1.,.5,.18)*(metro*1.1+sub*.45+town*.8+hw*.3)+vec3(.95,.85,.72)*metro*.7;
+  c+=lights*night*uD.y*(1.-cl*.85)*land;
+  c+=vec3(1.,.55,.25)*cl*smoothstep(.2,.7,pop)*.04*night*uD.y;              // city glow on the undersides of cloud
+  c+=vec3(.007,.010,.018)*(.3+cl*2.2)*night;                                 // starlight and airglow: night clouds read faint blue-grey
   return c; }
 void main(){
   vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
   vec3 E=uC.xyz; float S=uC.w;
-  vec3 col=spaceCol(rd);
-  vec3 Ldir=normalize(E-ro);
+  float pxa=1./(uFov*uRes.y);
+  float mie=pow(max(dot(rd,normalize(E-ro)),0.),10.);
+  vec3 bg=spaceCol(rd)*.7, atm=vec3(0), trans=vec3(1);
+  vec3 col=bg;
   float tP=1e9; float b=dot(ro,rd), c=dot(ro,ro)-RP*RP, h=b*b-c;
-  if(h>0.){ float t=-b-sqrt(h); if(t>0.){ tP=t; vec3 p=ro+rd*t, n=normalize(p); col=planet(p,n,rd,E);
-      float mu=dot(n,normalize(E-p)); float rim=pow(1.-max(dot(n,-rd),0.),6.);
-      col+=mix(vec3(.08,.11,.22), vec3(1.,.72,.42), smoothstep(-.2,.35,mu))*rim*smoothstep(-.35,.15,mu)*.35*uD.x; } }
-  // atmosphere above the limb
-  float tc=-dot(ro,rd); vec3 pc=ro+rd*max(tc,0.); float hc=length(pc)-RP;
-  if(tP>1e8 && tc>0.){ vec3 nc=normalize(pc); float mu=dot(nc,normalize(E-pc));
-    float A=exp(-max(hc,0.)/70.); float fw=pow(max(dot(rd,Ldir),0.),6.);
-    vec3 ac=mix(vec3(.10,.14,.28), vec3(1.,.74,.45), smoothstep(-.1,.5,mu)*.6+fw*.4);
-    col+=ac*A*smoothstep(-.45,.2,mu)*(1.+fw*4.)*.45*uD.x; }
-  float tEye; vec3 eye=greatEye(ro,rd,E,S,tEye);
-  vec3 ent; float tEnt; bool entHit=marchEntity(ro,rd,E,S,min(tEye,tP),ent,tEnt);
+  if(h>0. && -b-sqrt(h)>0.){ float t=-b-sqrt(h); tP=t; vec3 p=ro+rd*t, n=normalize(p);
+    float cz=max(dot(n,-rd),0.), fw=t*pxa/sqrt(max(cz,.03));
+    float cl; vec3 s=earth(p,n,rd,fw,E,S,cl);
+    float muP=dot(n,normalize(E-p));
+    vec3 Tr=exp(-TAU0*airmass(cz));
+    vec3 sunT=mix(vec3(1.,.3,.08), vec3(1.,.86,.66), smoothstep(-.05,.35,muP));
+    vec3 inS=(1.-Tr)*sunT*uD.x*.22*smoothstep(-.15,.2,muP)*(.5+1.5*mie);
+    float ag=min(1./max(cz,.02),45.)*.0005;
+    col=s*Tr+inS+vec3(.25,1.,.42)*ag*(1.-.7*smoothstep(-.1,.2,muP));
+  } else {
+    float tc=-b; vec3 pc=ro+rd*max(tc,0.); float hc=length(pc)-RP;
+    if(tc>0. && hc<300.){ vec3 nc=normalize(pc); float muc=dot(nc,normalize(E-pc));
+      vec3 tauT=TAU0*79.*exp(-max(hc,0.)/8.);
+      trans=exp(-tauT);
+      float litc=smoothstep(-.2,.15,muc);
+      vec3 sunC=mix(vec3(1.,.28,.07), vec3(1.,.86,.66), smoothstep(-.05,.3,muc));
+      atm=(1.-trans)*sunC*litc*uD.x*.35*(.5+2.5*mie);
+      atm+=vec3(.25,1.,.42)*exp(-pow((hc-95.)/5.,2.))*.02*(1.-.7*litc);     // airglow, a thin green shell seen edge-on
+    }
+  }
+  float tEye; vec3 eye=greatEye(ro,rd,E,S,pxa,tEye);
+  vec3 ent; float tEnt; bool entHit=marchEntity(ro,rd,E,S,min(tEye,tP),pxa,ent,tEnt);
   if(eye.x>=0. && tEye<tEnt && tEye<tP){ ent=eye; tEnt=tEye; entHit=true; }
-  if(entHit && tEnt<tP) col=ent;
-  // corona and halo of the core: light that seeps around the great eye
+  if(tP>1e8) col=(entHit? ent : bg)*trans+atm;
+  else if(entHit && tEnt<tP) col=ent;
+  // corona and halo of the core: light that seeps around the great eye, dimmed and reddened by the limb
   vec3 oc=ro-E; float tcE=-dot(oc,rd); float dmin=length(oc+rd*tcE);
   float behind=(tP<1e8 && tP<tcE)? 0. : 1.;
   float occl=(entHit && tEnt<tcE)? 0. : 1.;
@@ -510,18 +622,30 @@ void main(){
   float corona=exp(-max(dmin-Re,0.)/(.018*S))*step(Re*.998,dmin);
   float x=max(dmin-Re,0.)/S;
   float halo=exp(-x/.1)*.22+exp(-x/.5)*.03;
-  col+=vec3(1.,.8,.52)*(corona*1.2+halo)*uA.z*behind*occl;
+  col+=vec3(1.,.8,.52)*(corona*1.2+halo)*uA.z*behind*occl*trans;
   fragColor=vec4(col,1.); }`;
 
-  // geometry of the shot: eye radius 0.165 H on screen, planet radius 0.72 H, limb top 0.215 H below centre
-  const RPL = 6371, OFOV = 1.3, OD = 40000;
-  const OS = 0.165 / (0.66 * OFOV) * OD;
-  const OANG = Math.atan(0.72 / OFOV), ODP = RPL / Math.sin(OANG), ODOWN = Math.atan(0.215 / OFOV) + OANG;
-  const OC = [0, ODP * Math.sin(ODOWN), -ODP * Math.cos(ODOWN)];
-  const OE = [OC[0], OC[1], OC[2] + OD];
-  const TO_CAM = [0, 0, -1];
-  const REST_LOOK = norm([-0.36, -0.52, -0.77]);
-  const RING_PHASE5 = 1336.4;          // searched: every ring's near arc stays ≥1.3 eye radii off the pupil for this camera, 50–70 s
+  // geometry: the being hangs 80,000 km from the Earth's centre; we fly a low arc over the night side toward it, and it
+  // rises over the limb like a sunrise (eye clear of the limb at ~57 s). D0 = angle, seen from the centre, between us and
+  // it at k = 50; DA = how far round we travel. A slightly wide lens keeps the streaming ground in the lower frame.
+  const RPL = 6371, OFOV = 1.05, OS = 18000;             // great eye radius 0.66·OS ≈ 11,900 km (bigger than the Earth)
+  const RAD = Math.PI / 180, PHI_E = 89 * RAD;
+  const OE = [6000, 80000 * Math.cos(PHI_E), 80000 * Math.sin(PHI_E)];
+  const D0 = 104, DA = 12, TAU_F = 6.5, H0 = 320, H1 = 520;
+  function flight(k) {                                   // a rush out of the white that settles into a glide
+    const s = (1 - Math.exp(-(k - 50) / TAU_F)) / (1 - Math.exp(-20 / TAU_F));
+    const phi = PHI_E - (D0 - DA * s) * RAD, rc = RPL + H0 + (H1 - H0) * smooth(50, 70, k);
+    return [0, rc * Math.cos(phi), rc * Math.sin(phi)];
+  }
+  function orbitCam(k) {                                 // aimed just below the being so it rises from the limb to the upper frame
+    const pos = flight(k), up = norm(pos), toE = norm(sub(OE, pos));
+    const right = norm(cross(toE, up)), upv = cross(right, toE);
+    const d = Math.atan(lerp(0.12, 0.17, smooth(50, 64, k)) / OFOV);
+    return { pos, fwd: norm(add3(mul3(toE, Math.cos(d)), mul3(upv, -Math.sin(d)))), up, fov: OFOV };
+  }
+  const ANCHOR = mul3(norm(flight(57)), RPL);
+  const REST_LOOK = norm([-0.5, -0.28, -0.82]);          // before it finds us, it watches the world
+  const RING_PHASE5 = 1336.4;
   // where every ring eye sits and when it opens (mirrors the shader), for the light that blooms as each one wakes
   const hash12 = (x, y) => { let a = (x * .1031) % 1, b = (y * .1031) % 1, c = (x * .1031) % 1; if (a < 0) a += 1; if (b < 0) b += 1; if (c < 0) c += 1;
     const d = a * (b + 33.33) + b * (c + 33.33) + c * (a + 33.33); a += d; b += d; c += d; const v = ((a + b) * c) % 1; return v < 0 ? v + 1 : v; };
@@ -534,55 +658,50 @@ void main(){
       const u = (ro - e.o0) / 0.12; if (u < 0.15 || u > 2.5) continue;
       const M = rings.slice(e.id * 9, e.id * 9 + 9), q = [e.R * Math.cos(e.th), 0, e.R * Math.sin(e.th)];
       const w = [M[0] * q[0] + M[1] * q[1] + M[2] * q[2], M[3] * q[0] + M[4] * q[1] + M[5] * q[2], M[6] * q[0] + M[7] * q[1] + M[8] * q[2]];  // ring -> world (transpose)
-      const P = project(cam, add3(OE, mul3(w, OS))); if (!P || P[1] < BAR || P[1] > H - BAR) continue;
-      const a = Math.exp(-Math.pow((u - 0.55) / 0.45, 2)) * 0.75;
-      const g = o.createRadialGradient(P[0], P[1], 0, P[0], P[1], 70); g.addColorStop(0, `rgba(255,236,200,${a})`); g.addColorStop(0.25, `rgba(255,190,110,${a * 0.45})`); g.addColorStop(1, "rgba(255,160,80,0)");
-      o.fillStyle = g; o.beginPath(); o.arc(P[0], P[1], 70, 0, 7); o.fill();
+      const Pw = add3(OE, mul3(w, OS)), dv = sub(Pw, cam.pos), dl = Math.hypot(...dv), rv = mul3(dv, 1 / dl);
+      const pb = dot(cam.pos, rv), ph = pb * pb - (dot(cam.pos, cam.pos) - RPL * RPL);
+      if (ph > 0 && -pb - Math.sqrt(ph) > 0 && -pb - Math.sqrt(ph) < dl) continue;          // behind the Earth
+      const P = project(cam, Pw); if (!P || P[1] < BAR || P[1] > H - BAR) continue;
+      const a = Math.exp(-Math.pow((u - 0.55) / 0.45, 2)) * 0.6;
+      const g = o.createRadialGradient(P[0], P[1], 0, P[0], P[1], 60); g.addColorStop(0, `rgba(255,236,200,${a})`); g.addColorStop(0.25, `rgba(255,190,110,${a * 0.45})`); g.addColorStop(1, "rgba(255,160,80,0)");
+      o.fillStyle = g; o.beginPath(); o.arc(P[0], P[1], 60, 0, 7); o.fill();
     }
     o.restore();
   }
-  // The great eye of something the size of a world does not blink open. A slit of light first (55.6), a slow creep,
-  // then on each heartbeat of the silence (score HEART: 465.55 + i = k 60.55 + i) the lid heaves higher and settles,
-  // like a weight being lifted. No freeze: something is always moving.
-  const HB = [60.55, 61.55, 62.55, 63.55];
+  // Something the size of a world does not move quickly. The great eye opens in one long, smooth motion (slow to start,
+  // slow to settle), blinks once, slowly, in the silence, and only then turns to us. No steps, no jolts.
+  const sm5 = u => { u = clamp(u); return u * u * u * (u * (u * 6 - 15) + 10); };
   function lidOpen(k) {
-    let v = 0.13 * easeIO(clamp((k - 55.6) / 2.6)) + 0.09 * easeIO(clamp((k - 58.2) / 2.3));
-    HB.forEach((b, i) => { const u = clamp((k - b + 0.04) / 0.9); v += (i < 3 ? 0.2 : 0.18) * (1 - Math.pow(1 - u, 3)); });
-    return clamp(v);
+    const o1 = sm5((k - 55.2) / 6.6);                                   // 55.2 → 61.8
+    const blink = sm5((k - 62.1) / 1.0) * (1 - sm5((k - 63.25) / 1.45)); // closes 62.1–63.1, opens 63.25–64.7
+    return o1 * (1 - 0.97 * blink);
   }
-  // after each lift the whole frame shudders once, very slightly: mass
-  const shudder = k => HB.reduce((s, b) => k > b ? s + Math.exp(-(k - b) / 0.32) * Math.sin((k - b) * TAU * 5.5) : s, 0);
   function orbitFrame(k, T) {
-    const fin = FINAL();
-    // scene clock: slows to a third in the silence (60–64) but never stops
-    const clock = k < 60 ? k : k < 64 ? 60 + 0.35 * (k - 60) : 61.4 + (k - 64);
-    const rise = easeIO(clamp((k - 50) / 14));
-    const pos = add3(OC, [0, 420 * rise, 900 * rise]);
-    const rev = 1 - Math.pow(1 - clamp((k - 50) / 3.4), 3);         // ease-out pull-back from the core
-    const push = 1 - 0.27 * easeIO(clamp((k - 54.5) / 9.5));        // a slow push toward the eye as it wakes; the world's limb stays in frame
-    const fov = OFOV * push * (1 + 0.16 * easeIO(clamp((k - 64) / 6))) * lerp(6.0, 1.0, rev);
-    const fwdN = norm([0, -0.002 * rise, 1]), toE = norm(sub(OE, pos));
-    const sh = shudder(k) * 0.0011;
-    const cam = look(pos, add3(pos, norm(add3(add3(mul3(toE, 1 - rev), mul3(fwdN, rev)), [sh * 0.6, sh, 0]))), fov);
-    const gaze = easeIO(clamp((k - 64.3) / 2.6));
-    const sock = norm(add3(mul3(norm(add3(TO_CAM, REST_LOOK)), 1 - gaze), mul3(TO_CAM, gaze * 1.0001)));
+    const fin = FINAL(), N = fin ? 5 : 1, SHUT = 0.5 / 24;        // several sub-frames over a 180° shutter: true motion blur
     const eyeOpen = lidOpen(k);
-    const pupil = easeIO(clamp((k - 60.8) / 3.4));
-    const slit = smooth(55.6, 57, k) * (1 - smooth(58.5, 61.5, k));
+    const pupil = sm5((k - 57.5) / 5.5);
+    const slit = smooth(55.4, 56.8, k) * (1 - smooth(58, 61, k));
+    const gaze = sm5((k - 64.3) / 2.8);
     const ringOpen = clamp((k - 51) / 7.2);
-    const beat = t => Math.exp(-Math.pow((k - t) / 0.07, 2));
-    const pulse = 0.06 * HB.reduce((s, b) => s + beat(b) + 0.7 * beat(b + 0.3), 0);
-    const core = (1.0 + 0.6 * eyeOpen) * (1 + pulse);
+    const core = 1.0 + 0.6 * eyeOpen;
     const ringLight = 0.75 + 0.35 * smooth(50, 52, k) + 0.3 * eyeOpen;
-    const q = project(cam, OE), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
     const flash = 1 - smooth(50, 52.6, k);
-    GL.frame({ name: "ch5_orbit", fs: SHADERS.ch5_orbit, scale: SC(0.55, 1.5),
-      uniforms: { uTime: 405 + clock, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, pupil], uC: [...OE, OS],
-        uD: [1.0 + 0.45 * eyeOpen, 1.0, fin ? 1 : 0, clock], uRing: heavensRings(RING_PHASE5 + (clock - 50) * 0.018), uSock: sock, uLook: REST_LOOK } },
-      { bloom: 0.45 + 0.4 * flash + 0.15 * slit, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.22 + 0.1 * eyeOpen + 0.3 * slit], letterbox: LB, vignette: 0.6,
-        lift: 0.75 * Math.pow(flash, 2.2), fade: 1 - smooth(69.2, 70, k), t: T });
-    blit();
-    pic(() => eyeBlooms(k, cam, heavensRings(RING_PHASE5 + (clock - 50) * 0.018)));
+    const rings = heavensRings(RING_PHASE5 + (k - 50) * 0.018);
+    for (let i = 0; i < N; i++) {
+      const kt = k + ((i + 0.5) / N - 0.5) * SHUT;
+      const cam = orbitCam(kt);
+      const toCam = norm(sub(cam.pos, OE));
+      const sock = norm(add3(mul3(norm(add3(toCam, REST_LOOK)), 1 - gaze), mul3(toCam, gaze * 1.0001)));
+      const r = norm(cross(cam.fwd, cam.up)), eyeUp = cross(r, cam.fwd);
+      const q = project(cam, OE), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
+      GL.frame({ name: "ch5_orbit", fs: SHADERS.ch5_orbit, scale: SC(0.55, 1.35),
+        uniforms: { uTime: 405 + kt, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, pupil], uC: [...OE, OS],
+          uD: [1.0 + 0.7 * eyeOpen, 1.0, fin ? 1 : 0, kt], uRing: rings, uSock: sock, uLook: REST_LOOK, uEyeUp: eyeUp, uAnchor: ANCHOR } },
+        { bloom: 0.45 + 0.4 * flash + 0.15 * slit, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.06 + 0.04 * eyeOpen + 0.25 * slit], letterbox: LB, vignette: 0.6,
+          lift: 0.75 * Math.pow(flash, 2.2), fade: 1 - smooth(69.2, 70, k), t: T });
+      o.save(); o.globalAlpha = 1 / (i + 1); blit(); o.restore();
+    }
+    pic(() => eyeBlooms(k, orbitCam(k), rings));
   }
 
   // =====================================================================================================

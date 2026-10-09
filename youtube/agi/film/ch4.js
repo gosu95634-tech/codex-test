@@ -31,6 +31,13 @@
   }
   const camLook = (pos, at, fov, up = [0, 1, 0]) => ({ pos, fwd: norm(sub(at, pos)), up, fov });
   const small = (s, a, y = H - 24) => line(s, W / 2, y, { size: 19, color: "rgba(244,241,234,0.62)", alpha: a, spacing: 0.22, glow: 4 });
+  // a bottom caption with a smaller aside inside the same line (e.g. a currency conversion); parts = [[text, size, color?], ...]
+  const capMix = (parts, a, u) => {
+    const sp = 0.2 - 0.06 * ease(u * 2), y = H - BAR / 2;
+    o.save(); const ws = parts.map(([s, size]) => { o.font = `${size}px "SerifL"`; o.letterSpacing = `${sp * size}px`; return o.measureText(s).width; }); o.restore();
+    let x = W / 2 - ws.reduce((t, w) => t + w, 0) / 2;
+    parts.forEach(([s, size, color = STAR], i) => { line(s, x, y + (size < 40 ? 3 : 0), { size, color, glow: size < 40 ? 4 : 8, alpha: a, spacing: sp, blur: (1 - a) * 4, align: "left" }); x += ws[i]; });
+  };
 
   // ---------- shared GLSL
   const H4 = `
@@ -1069,7 +1076,7 @@ void main(){ vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
     caption(k, 63.6, 68.0, (a, u) => capB("수능 전 과목 만점", a, u));
     caption(k, 64.6, 68.7, (a) => small("수능 문제 기반 비공식 AI 평가", a));
     caption(k, 69.8, 82.6, (a, u) => capT("2026년 9월 8일 · OpenAI", a, u));
-    caption(k, 70.2, 73.3, (a, u) => capB("상금 100만 달러, 7대 밀레니엄 난제", a, u));
+    caption(k, 70.2, 73.3, (a, u) => capMix([["상금 100만 달러", 40], [" (약 13억 원)", 25, "rgba(244,241,234,0.62)"], [", 7대 밀레니엄 난제", 40]], a, u));   // 1 USD ≈ 1,342 KRW (2026-10-09)
     caption(k, 73.6, 76.6, (a, u) => capB("나비에–스토크스 방정식", a, u));
     caption(k, 77.2, 81.8, (a, u) => capB("공개되지 않은 모델이 88시간 만에 풀었다고 발표했다", a, u));
     caption(k, 78.4, 82.6, (a) => small("수학계 검증 진행 중", a));
