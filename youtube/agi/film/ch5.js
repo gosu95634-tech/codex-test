@@ -360,7 +360,7 @@ void main(){
   // uD: planet light, city lights, quality, scene clock   uLook: rest gaze   uSock: socket direction   uEyeUp: lid frame up
   // uAnchor: origin (km) for the surface noise, on the flight path, so the finest octaves stay precise
   const ENT5 = `
-uniform mat3 uRing[6]; uniform vec3 uSock; uniform vec3 uLook; uniform vec3 uEyeUp;
+uniform mat3 uRing[6]; uniform vec3 uSock; uniform vec3 uLook; uniform vec3 uEyeUp; uniform float uSpin[6];
 const int NR=6;
 const float EW=.1, EH=.04, RPL=6371., BT=.0075;
 vec3 hash33(vec3 p3){ p3=fract(p3*vec3(.1031,.1030,.0973)); p3+=dot(p3,p3.yxz+33.33); return fract((p3.xxy+p3.yxx)*p3.zyx)*2.-1.; }
@@ -393,7 +393,7 @@ vec3 envRefl(vec3 ro, vec3 rd, vec3 E){
 // one eye set into the outer face of a band; isEye: 1 = eye, .5 = its closed lid and bezel, 0 = metal
 vec3 ringEye(vec3 lp, int id, vec3 camL, float face, out float isEye){
   isEye=0.; if(face<.7) return vec3(0);
-  float R=ringR(id), th=atan(lp.z,lp.x);
+  float R=ringR(id), th=atan(lp.z,lp.x)+uSpin[id];                                   // the band turns like a wheel
   float N=floor(9.+float(id)*4.); float cell=6.2831853/N; float k=floor(th/cell+.5); float u=(th-k*cell)*R;
   float kk=mod(k+N,N); float h=hash12(vec2(kk*1.37+3.1, float(id)*7.3+1.9));
   float o0=(float(id)+h*2.4)/7.6*.88; float op=smoothstep(o0,o0+.12,uA.y);
@@ -508,7 +508,7 @@ bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, float pxa, out v
   mat3 M=uRing[id]; vec3 nL=M*n;
   float rr=length(lp.xz); vec3 radial=vec3(lp.x,0.,lp.z)/max(rr,1e-4);
   float face=dot(nL,radial);                                                      // +1 outer face, -1 inner face, 0 on the edges
-  float th=atan(lp.z,lp.x), R=ringR(id), w=ringW(id), ay=abs(lp.y);
+  float th=atan(lp.z,lp.x)+uSpin[id], R=ringR(id), w=ringW(id), ay=abs(lp.y);
   float pfE=tEnt*pxa/S, lw=max(.0011,pfE*1.1);
   // engraving: grooves along the edges, a scale of graduations (every degree, longer every fifth), and the seams where
   // the segments of the band are joined (every ten degrees). It fades out where it would be finer than a pixel.
@@ -532,7 +532,7 @@ bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, float pxa, out v
   if(isEye>.75) ent=ec*(.75+.5*diff); else if(isEye>.25) ent*=.45;
   return true; }
 `;
-  SHADERS.ch5_orbit = COMMON + `uniform vec4 uD; uniform vec3 uAnchor;\n` + ENT5 + `
+  SHADERS.ch5_orbit = COMMON + `uniform vec4 uD; uniform vec3 uAnchor; uniform vec4 uVel;\n` + ENT5 + `
 const float RP=6371.;
 const vec3 TAU0=vec3(.045,.10,.24);                    // vertical optical depth of the air (red, green, blue)
 // fBm in kilometres: first wavelength L0, n octaves; an octave finer than the pixel footprint fw (km) fades to its mean,
@@ -623,42 +623,62 @@ void main(){
   float x=max(dmin-Re,0.)/S;
   float halo=exp(-x/.1)*.22+exp(-x/.5)*.03;
   col+=vec3(1.,.8,.52)*(corona*1.2+halo)*uA.z*behind*occl*trans;
+  // its wake: a faint glow along the path it has just covered (uVel.xyz = the way it came, uVel.w = length in km);
+  // it fades as the thing slows to rest
+  if(uVel.w>1.){ vec3 a=E, ab=uVel.xyz*uVel.w, w0=a-ro;
+    float A2=dot(ab,ab), B2=dot(ab,rd), D2=dot(ab,w0), E2=dot(rd,w0);
+    float s=clamp((B2*E2-D2)/max(A2-B2*B2,1e-3),0.,1.), t=max(dot(a+ab*s-ro,rd),0.);
+    float d=length(a+ab*s-(ro+rd*t));
+    float vis=(tP<t || (entHit && tEnt<t))? 0. : 1.;
+    float wake=exp(-d/(.2*S))*pow(1.-s,1.6)*smoothstep(.05,.3,s);
+    col+=vec3(1.,.76,.45)*wake*.26*min(uVel.w/20000.,1.)*vis*trans; }
   fragColor=vec4(col,1.); }`;
 
-  // geometry: the being hangs 80,000 km from the Earth's centre; we fly a low arc over the night side toward it, and it
-  // rises over the limb like a sunrise (eye clear of the limb at ~57 s). D0 = angle, seen from the centre, between us and
-  // it at k = 50; DA = how far round we travel. A slightly wide lens keeps the streaming ground in the lower frame.
+  // geometry: the being comes to rest 80,000 km from the Earth's centre; we fly a low arc over the night side toward it.
+  // D0 = angle, seen from the centre, between us and its resting place at k = 50; DA = how far round we travel.
+  // A slightly wide lens keeps the streaming ground in the lower frame.
   const RPL = 6371, OFOV = 1.05, OS = 18000;             // great eye radius 0.66·OS ≈ 11,900 km (bigger than the Earth)
   const RAD = Math.PI / 180, PHI_E = 89 * RAD;
-  const OE = [6000, 80000 * Math.cos(PHI_E), 80000 * Math.sin(PHI_E)];
+  const E_END = [6000, 80000 * Math.cos(PHI_E), 80000 * Math.sin(PHI_E)];
+  // It is moving. Out of the white it glides in from the right at ~5,000 km/s and coasts to rest by 64 s, where it turns
+  // its eye on us. On screen that is a slow drift across a third of the frame: the bigger a thing is, the slower it seems.
+  // Its light on the sea and along the limb slides with it, which gives the real speed away.
+  const E_OFF = [-42000, 0, 20000], E_STOP = 64;
+  const beingPos = k => add3(E_END, mul3(E_OFF, Math.pow(1 - clamp((k - 50) / (E_STOP - 50)), 2)));
+  const TRACK = 0.22;                                    // the camera follows it only a little, so it drifts across the frame
   const D0 = 104, DA = 12, TAU_F = 6.5, H0 = 320, H1 = 520;
   function flight(k) {                                   // a rush out of the white that settles into a glide
     const s = (1 - Math.exp(-(k - 50) / TAU_F)) / (1 - Math.exp(-20 / TAU_F));
     const phi = PHI_E - (D0 - DA * s) * RAD, rc = RPL + H0 + (H1 - H0) * smooth(50, 70, k);
     return [0, rc * Math.cos(phi), rc * Math.sin(phi)];
   }
-  function orbitCam(k) {                                 // aimed just below the being so it rises from the limb to the upper frame
-    const pos = flight(k), up = norm(pos), toE = norm(sub(OE, pos));
-    const right = norm(cross(toE, up)), upv = cross(right, toE);
+  function orbitCam(k) {                                 // aimed below the being so it rises from the limb to the upper frame
+    const pos = flight(k), up = norm(pos), aim = add3(E_END, mul3(sub(beingPos(k), E_END), TRACK)), toA = norm(sub(aim, pos));
+    const right = norm(cross(toA, up)), upv = cross(right, toA);
     const d = Math.atan(lerp(0.12, 0.17, smooth(50, 64, k)) / OFOV);
-    return { pos, fwd: norm(add3(mul3(toE, Math.cos(d)), mul3(upv, -Math.sin(d)))), up, fov: OFOV };
+    return { pos, fwd: norm(add3(mul3(toA, Math.cos(d)), mul3(upv, -Math.sin(d)))), up, fov: OFOV };
   }
   const ANCHOR = mul3(norm(flight(57)), RPL);
-  const REST_LOOK = norm([-0.5, -0.28, -0.82]);          // before it finds us, it watches the world
-  const RING_PHASE5 = 1336.4;
+  const REST_LOOK = norm([0.55, -0.25, -0.8]);           // while it travels it looks ahead and down, at the world
+  // the bands tumble slowly (RING_RATE) and each turns about its own axis like a wheel, alternate ones the other way, so
+  // the eyes set in them travel along them. Phase searched with the glide: no band crosses the pupil while the eye is open.
+  const RING_PHASE5 = 1336.4, RING_RATE = 0.3;
+  const SPIN = [0.05, -0.042, 0.036, -0.03, 0.026, -0.022];
+  const spins = k => SPIN.map(w => (k - 50) * w);
   // where every ring eye sits and when it opens (mirrors the shader), for the light that blooms as each one wakes
   const hash12 = (x, y) => { let a = (x * .1031) % 1, b = (y * .1031) % 1, c = (x * .1031) % 1; if (a < 0) a += 1; if (b < 0) b += 1; if (c < 0) c += 1;
     const d = a * (b + 33.33) + b * (c + 33.33) + c * (a + 33.33); a += d; b += d; c += d; const v = ((a + b) * c) % 1; return v < 0 ? v + 1 : v; };
   const EYES = (() => { const a = []; for (let id = 0; id < 6; id++) { const N = Math.floor(9 + id * 4), R = 1.05 + id * 0.3;
     for (let kk = 0; kk < N; kk++) { const h = hash12(kk * 1.37 + 3.1, id * 7.3 + 1.9); a.push({ id, th: kk * 2 * Math.PI / N, R, o0: (id + h * 2.4) / 7.6 * 0.88 }); } } return a; })();
-  function eyeBlooms(k, cam, rings) {
+  function eyeBlooms(k, cam, rings, E, sp) {
     const ro = clamp((k - 51) / 7.2);
     o.save(); o.globalCompositeOperation = "lighter";
     for (const e of EYES) {
       const u = (ro - e.o0) / 0.12; if (u < 0.15 || u > 2.5) continue;
-      const M = rings.slice(e.id * 9, e.id * 9 + 9), q = [e.R * Math.cos(e.th), 0, e.R * Math.sin(e.th)];
+      const th = e.th - sp[e.id];
+      const M = rings.slice(e.id * 9, e.id * 9 + 9), q = [e.R * Math.cos(th), 0, e.R * Math.sin(th)];
       const w = [M[0] * q[0] + M[1] * q[1] + M[2] * q[2], M[3] * q[0] + M[4] * q[1] + M[5] * q[2], M[6] * q[0] + M[7] * q[1] + M[8] * q[2]];  // ring -> world (transpose)
-      const Pw = add3(OE, mul3(w, OS)), dv = sub(Pw, cam.pos), dl = Math.hypot(...dv), rv = mul3(dv, 1 / dl);
+      const Pw = add3(E, mul3(w, OS)), dv = sub(Pw, cam.pos), dl = Math.hypot(...dv), rv = mul3(dv, 1 / dl);
       const pb = dot(cam.pos, rv), ph = pb * pb - (dot(cam.pos, cam.pos) - RPL * RPL);
       if (ph > 0 && -pb - Math.sqrt(ph) > 0 && -pb - Math.sqrt(ph) < dl) continue;          // behind the Earth
       const P = project(cam, Pw); if (!P || P[1] < BAR || P[1] > H - BAR) continue;
@@ -686,22 +706,24 @@ void main(){
     const core = 1.0 + 0.6 * eyeOpen;
     const ringLight = 0.75 + 0.35 * smooth(50, 52, k) + 0.3 * eyeOpen;
     const flash = 1 - smooth(50, 52.6, k);
-    const rings = heavensRings(RING_PHASE5 + (k - 50) * 0.018);
     for (let i = 0; i < N; i++) {
       const kt = k + ((i + 0.5) / N - 0.5) * SHUT;
-      const cam = orbitCam(kt);
-      const toCam = norm(sub(cam.pos, OE));
+      const cam = orbitCam(kt), E = beingPos(kt);
+      const vel = mul3(sub(beingPos(kt + 0.05), beingPos(kt - 0.05)), 10), speed = Math.hypot(...vel);       // km/s
+      const wake = speed > 1 ? [...mul3(vel, -1 / speed), speed * 4] : [0, 0, 0, 0];                            // the last 4 s of its path
+      const toCam = norm(sub(cam.pos, E));
       const sock = norm(add3(mul3(norm(add3(toCam, REST_LOOK)), 1 - gaze), mul3(toCam, gaze * 1.0001)));
       const r = norm(cross(cam.fwd, cam.up)), eyeUp = cross(r, cam.fwd);
-      const q = project(cam, OE), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
+      const q = project(cam, E), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
       GL.frame({ name: "ch5_orbit", fs: SHADERS.ch5_orbit, scale: SC(0.55, 1.35),
-        uniforms: { uTime: 405 + kt, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, pupil], uC: [...OE, OS],
-          uD: [1.0 + 0.7 * eyeOpen, 1.0, fin ? 1 : 0, kt], uRing: rings, uSock: sock, uLook: REST_LOOK, uEyeUp: eyeUp, uAnchor: ANCHOR } },
+        uniforms: { uTime: 405 + kt, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, pupil], uC: [...E, OS],
+          uD: [1.0 + 0.7 * eyeOpen, 1.0, fin ? 1 : 0, kt], uRing: heavensRings(RING_PHASE5 + (kt - 50) * RING_RATE), uSpin: { float: spins(kt) },
+          uSock: sock, uLook: REST_LOOK, uEyeUp: eyeUp, uAnchor: ANCHOR, uVel: wake } },
         { bloom: 0.45 + 0.4 * flash + 0.15 * slit, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.06 + 0.04 * eyeOpen + 0.25 * slit], letterbox: LB, vignette: 0.6,
           lift: 0.75 * Math.pow(flash, 2.2), fade: 1 - smooth(69.2, 70, k), t: T });
       o.save(); o.globalAlpha = 1 / (i + 1); blit(); o.restore();
     }
-    pic(() => eyeBlooms(k, orbitCam(k), rings));
+    pic(() => eyeBlooms(k, orbitCam(k), heavensRings(RING_PHASE5 + (k - 50) * RING_RATE), beingPos(k), spins(k)));
   }
 
   // =====================================================================================================
