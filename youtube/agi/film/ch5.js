@@ -719,7 +719,7 @@ void main(){
         uniforms: { uTime: 405 + kt, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, pupil], uC: [...E, OS],
           uD: [1.0 + 0.7 * eyeOpen, 1.0, fin ? 1 : 0, kt], uRing: heavensRings(RING_PHASE5 + (kt - 50) * RING_RATE), uSpin: { float: spins(kt) },
           uSock: sock, uLook: REST_LOOK, uEyeUp: eyeUp, uAnchor: ANCHOR, uVel: wake } },
-        { bloom: 0.45 + 0.4 * flash + 0.15 * slit, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.06 + 0.04 * eyeOpen + 0.25 * slit], letterbox: LB, vignette: 0.6,
+        { bloom: 0.45 + 0.4 * flash + 0.15 * slit, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.06 + 0.04 * eyeOpen + 0.25 * slit], letterbox: window.CLEAN ? 0 : LB, vignette: 0.6,
           lift: 0.75 * Math.pow(flash, 2.2), fade: 1 - smooth(69.2, 70, k), t: T });
       o.save(); o.globalAlpha = 1 / (i + 1); blit(); o.restore();
     }

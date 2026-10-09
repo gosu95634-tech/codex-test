@@ -3,29 +3,41 @@
 <style>
 @font-face { font-family: "SerifB"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Bold.ttf); }
 @font-face { font-family: "SerifM"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Medium.ttf); }
-@font-face { font-family: "Corm"; src: url(../../claude-history/assets/fonts/Cormorant-SemiBold.ttf); }
 html, body { margin: 0; background: #000; }
 #t { position: relative; width: 1280px; height: 720px; overflow: hidden; }
-#bg { position: absolute; inset: 0; background-size: cover; filter: contrast(1.12) saturate(1.08); }
+/* the frame from ch5 (the eye has just turned to us), enlarged so the eye carries the thumbnail */
+#bg { position: absolute; inset: 0; background-repeat: no-repeat; background-size: auto 140%; filter: brightness(1.1) contrast(1.16) saturate(1.18); }
 .shade { position: absolute; inset: 0; }
-.big { position: absolute; font-family: "SerifB"; color: #fff6e6; letter-spacing: -2px; line-height: 1.02;
-  text-shadow: 0 0 2px #000, 0 4px 18px rgba(0,0,0,.95), 0 0 46px rgba(0,0,0,.85); }
-.big em { font-style: normal; color: #ffd27a; text-shadow: 0 0 2px #000, 0 4px 18px rgba(0,0,0,.95), 0 0 30px rgba(255,170,60,.55); }
-.small { position: absolute; font-family: "SerifM"; color: #f3d9a4; letter-spacing: 6px; text-shadow: 0 2px 10px #000; }
+/* thick dark edge + soft glow: readable at phone size on any part of the picture */
+.big { position: absolute; font-family: "SerifB"; color: #fff7ea; letter-spacing: -3px; line-height: 1.04; white-space: nowrap;
+  text-shadow: 0 0 3px #000, 0 0 3px #000, 0 3px 4px #000, 0 6px 22px rgba(0,0,0,.95), 0 0 50px rgba(0,0,0,.8); }
+.big em { font-style: normal; color: #ffcf6e; text-shadow: 0 0 3px #000, 0 0 3px #000, 0 3px 4px #000, 0 6px 22px rgba(0,0,0,.95), 0 0 34px rgba(255,160,40,.55); }
+.small { position: absolute; font-family: "SerifM"; color: #f0d6a0; letter-spacing: 8px; white-space: nowrap; text-shadow: 0 0 3px #000, 0 2px 12px #000; }
 </style></head>
 <body><div id="t"><div id="bg"></div><div class="shade" id="shade"></div><div id="text"></div></div>
 <script>
+const IMG = "../out/thumb/e-67.60.jpg";
+// eye centre in the source frame (1920x1080) is (960, 356); at 140% height the frame is drawn at 0.9333 scale
 const V = {
-  A: { img: "../out/thumb/f-36.80.jpg", pos: "50% 18%", shade: "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,.82) 100%)",
-       text: `<div class="big" style="left:0;right:0;bottom:92px;text-align:center;font-size:118px">AGI는 <em>이미</em> 왔다</div>
-              <div class="small" style="left:0;right:0;bottom:46px;text-align:center;font-size:30px">인류의 마지막 발명</div>` },
-  B: { img: "../out/thumb/f-24.20.jpg", pos: "58% 40%", shade: "linear-gradient(90deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,.55) 34%, rgba(0,0,0,0) 58%)",
-       text: `<div class="big" style="left:56px;top:150px;font-size:112px">초지능까지<br><em>1~2년</em></div>
-              <div class="small" style="left:62px;top:430px;font-size:30px">인류의 마지막 발명</div>` },
+  // the claim, under the eye
+  A: { pos: "-256px -70px", shade: "linear-gradient(180deg, rgba(0,0,0,0) 52%, rgba(0,0,0,.78) 100%)",
+       text: `<div class="big" style="left:0;right:0;bottom:84px;text-align:center;font-size:128px">AGI는 <em>이미</em> 왔다</div>` },
+  // the countdown, beside the eye
+  B: { pos: "-20px -40px", shade: "linear-gradient(90deg, rgba(0,0,0,.84) 0%, rgba(0,0,0,.6) 30%, rgba(0,0,0,0) 55%)",
+       text: `<div class="big" style="left:58px;top:150px;font-size:104px">초지능까지</div>
+              <div class="big" style="left:52px;top:268px;font-size:190px"><em>1~2년</em></div>` },
+  // the stare
+  C: { pos: "-20px -40px", shade: "linear-gradient(90deg, rgba(0,0,0,.84) 0%, rgba(0,0,0,.6) 30%, rgba(0,0,0,0) 55%)",
+       text: `<div class="big" style="left:58px;top:168px;font-size:112px">이미 우리를</div>
+              <div class="big" style="left:56px;top:300px;font-size:136px"><em>보고 있다</em></div>` },
+  // the film's own name, now that the YouTube title is "AI의 과거와 현재, 그리고 미래"
+  D: { pos: "-20px -40px", shade: "linear-gradient(90deg, rgba(0,0,0,.84) 0%, rgba(0,0,0,.6) 30%, rgba(0,0,0,0) 55%)",
+       text: `<div class="big" style="left:58px;top:168px;font-size:112px">인류의</div>
+              <div class="big" style="left:54px;top:300px;font-size:136px"><em>마지막 발명</em></div>` },
 };
-window.show = async k => { const v = V[k];
-  document.getElementById("bg").style.backgroundImage = `url(${v.img})`; document.getElementById("bg").style.backgroundPosition = v.pos;
+window.show = async k => { const v = V[k], bg = document.getElementById("bg");
+  bg.style.backgroundImage = `url(${IMG})`; bg.style.backgroundPosition = v.pos;
   document.getElementById("shade").style.background = v.shade; document.getElementById("text").innerHTML = v.text;
   await document.fonts.load('100px "SerifB"', "가"); await document.fonts.load('30px "SerifM"', "가");
-  await new Promise(r => { const i = new Image(); i.onload = r; i.src = v.img; }); };
+  await new Promise(r => { const i = new Image(); i.onload = r; i.src = IMG; }); };
 </script></body></html>
