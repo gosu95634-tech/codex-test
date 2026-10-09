@@ -1,9 +1,9 @@
 // 「V · 폭발」 ch5 (film 405–475, 70 s).
 //  0–6   chapter card over a golden spiral already turning (continues ch4's spiral beyond the doors)
 //  6–30  the self-improvement spiral: a logarithmic golden spiral of fire and stars, tighter, brighter, faster
-// 30–50  the flight up the marble staircase of intelligence, past 「아인슈타인」, dissolving into white light
+// 30–50  from a glade in a night forest, the flight up the marble staircase of intelligence, past 「아인슈타인」, into white light
 // 50–60  cut from white (organ tutti): ASI, the eye-ringed being, hangs above the limb of the world
-// 60–64  silence: the image almost freezes
+// 55.6–64 the great eye wakes: a slit of light, then the lid heaves higher on each heartbeat of the silence (60–64)
 // 64–70  the great eye turns and looks at us; fade to black
 (() => {
   const TAU = Math.PI * 2;
@@ -193,7 +193,7 @@ vec3 sky(vec3 rd, vec3 L){
   float s=max(dot(rd,L),0.), sw=.5+uD.x;
   vec3 c=mix(vec3(.003,.003,.007), vec3(.009,.009,.017), smoothstep(-.4,.7,rd.y));
   float alt=smoothstep(15.,260.,uCamPos.y);                         // from a dusk sky on the ground to space
-  c=mix(c*vec3(1.6,1.4,1.5)+vec3(.012,.012,.02)*smoothstep(.3,-.1,rd.y), c, alt);
+  c=mix(c*vec3(1.6,1.4,1.5)+vec3(.012,.012,.02)*smoothstep(.3,-.1,rd.y)+vec3(.035,.04,.065)*exp(-abs(rd.y-.03)*7.), c, alt);   // a pale band low in the sky so the treeline reads
   c+=stars(rd,(.7+.6*alt)*(1.-smoothstep(.75,.98,s))*(1.-clamp(uD.x*.3,0.,.9)));
   c+=vec3(1.,.95,.86)*pow(s,6000.)*14.*sw + vec3(1.,.84,.6)*pow(s,600.)*1.1*sw + vec3(1.,.72,.45)*pow(s,70.)*.22*sw + vec3(.75,.5,.3)*pow(s,9.)*.035*sw;
   return c; }
@@ -207,24 +207,70 @@ float mistDens(vec3 p){
   if(m<=0.) return 0.;
   float n=fbm3(p*vec3(.09,.16,.05)+vec3(0.,0.,uTime*.02));
   return m*smoothstep(.42,.72,n)*.35; }
+// the old forest the staircase rises out of: tall conifers on a jittered 7 m grid, an oval glade around the foot of
+// the stairs. Crowns are cones with branch whorls. Distances are conservative (cone x .6, capped by the gap to the
+// trees outside the 3x3 neighbourhood) so the march never steps through a tree.
+const float FC=7., FTOP=27.;
+float tree(vec3 p, vec2 c, out float mat){
+  mat=0.;
+  float h1=hash12(c*1.31+7.7), h2=hash12(c*.77+2.3), h3=hash12(c+11.1);
+  vec2 ctr=(c+.5+(vec2(h1,h2)-.5)*.6)*FC;
+  vec2 gl=vec2(ctr.x/13., (ctr.y-8.)/54.);
+  if(dot(gl,gl)<1.+.35*(h3-.5)) return 1e9;                          // the glade
+  float hh=15.+12.*h3, R=min(hh*(.15+.06*h1),4.), yb=hh*(h2>.72? .2 : .03);
+  vec3 q=vec3(p.x-ctr.x, p.y+.32, p.z-ctr.y);
+  float r=length(q.xz);
+  float u=clamp((q.y-yb)/(hh-yb),0.,1.);
+  float wh=fract(u*(13.+6.*h2)+h1+.3*noise(vec3(q.xz*.7,c.x+c.y*7.)));   // many irregular whorls with drooping tips
+  float clump=.74+.5*(.6*noise(p*vec3(2.4,3.,2.4)+h1*17.)+.4*noise(p*vec3(6.,4.,6.)));   // ragged branch ends
+  float rr=R*pow(1.-u,1.1)*(.88+.12*smoothstep(0.,.9,wh))*clump+.08;
+  float dc=max(max((r-rr)*.42, yb-q.y), q.y-hh);
+  float dt=max(r-.28, q.y-yb-1.);
+  if(dt<dc){ mat=1.; return dt; }
+  return dc; }
+float forest(vec3 p, out float mat, out float top){
+  mat=0.; top=0.;
+  if(p.y>FTOP) return p.y-FTOP+.5;
+  vec2 c=floor(p.xz/FC); float d=4.2, m;
+  for(int j=-1;j<=1;j++) for(int i=-1;i<=1;i++){ float di=tree(p, c+vec2(float(i),float(j)), m); if(di<d){ d=di; mat=m; } }
+  return d; }
+float forestS(vec3 p){ float m, tp; return forest(p,m,tp); }
 void main(){
   float jit=hash12(gl_FragCoord.xy+fract(uTime*3.17)*113.);
   vec3 ro=uCamPos-uV*jit, rd=camRay(gl_FragCoord.xy);
   vec3 L=normalize(vec3(0.,uA.x,uA.y));
   float s=max(dot(rd,L),0.);
   vec3 col=sky(rd,L);
-  int NS=uD.z>.5? 200 : 120; float t=.05, kk; bool hit=false, gnd=false;
-  for(int i=0;i<200;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=map(p,kk), dg=p.y+.32; if(dg<d){ d=dg; } if(d<.0007*t){ hit=true; gnd= dg<=d+1e-5; break; } t+=d*.9; if(t>2000.) break; }
-  if(!hit && rd.y<0.){ float tg=-(ro.y+.32)/rd.y; if(tg>0.){ hit=true; gnd=true; t=tg; } }
+  int NS=uD.z>.5? 220 : 140; float t=.05, kk, fm=0., ftp; bool hit=false, gnd=false, fst=false;
+  for(int i=0;i<220;i++){ if(i>=NS) break; vec3 p=ro+rd*t; float d=map(p,kk), dg=p.y+.32, df=forest(p,fm,ftp);
+    float dm=min(dg,df); if(dm<d){ d=dm; }
+    if(d<.0007*t+.0005){ hit=true; gnd= dg<=d+1e-5; fst= !gnd && df<=d+1e-5; break; } t+=d*.9; if(t>2000.) break; }
+  if(!hit && rd.y<0.){ float tg=-(ro.y-FTOP*.6)/rd.y; if(tg>0.){ hit=true; fst=true; fm=2.; t=tg; } }   // far canopy
   vec3 sunC=vec3(1.,.86,.64)*(1.5+uD.x*1.4);
-  if(hit && gnd){ vec3 p=ro+rd*t;                                   // the stone plaza the staircase rises from
-    vec2 g=p.xz*.25; vec2 f=abs(fract(g)-.5); float joint=smoothstep(.485,.497,max(f.x,f.y));
-    float h=hash12(floor(g)); vec3 base=vec3(.075,.07,.068)*(.8+.4*h)*(.85+.3*fbm3(vec3(p.xz*.4,1.)));
+  vec3 fogN=vec3(.010,.012,.018);
+  if(hit && gnd){ vec3 p=ro+rd*t;                                   // the glade floor: moss and low grass
+    float n1=fbm3(vec3(p.xz*.35,1.)), n2=fbm3(vec3(p.xz*2.1,4.));
+    vec3 base=mix(vec3(.011,.014,.009), vec3(.024,.027,.016), n1)*(.7+.6*n2);
     float sh=softShadow(p+vec3(0.,.01,0.),L);
-    vec3 c=base*(sunC*max(L.y,0.)*sh*.6+vec3(.02,.02,.026));
-    vec3 rr=reflect(rd,vec3(0.,1.,0.)); c+=sky(rr,L)*.32*(1.-joint);                 // polished stone mirrors the night
-    c+=vec3(1.,.72,.36)*joint*(.35+.6*uD.x)*exp(-length(p.xz)*.035);                  // gold joints, like the stair inlay
-    float fogA=1.-exp(-t*.003); c=mix(c, vec3(.012,.012,.02)+vec3(1.,.8,.55)*pow(s,6.)*.08, fogA);
+    vec3 c=base*(sunC*max(L.y,0.)*sh*.45+vec3(.03,.034,.05));
+    c+=vec3(1.,.78,.5)*base*.5*exp(-length(p.xz-vec2(0.,2.))*.15)*(.35+.6*uD.x);          // the first steps light the moss
+    float fogA=1.-exp(-t*.006); c=mix(c, fogN+vec3(1.,.8,.55)*pow(s,6.)*.06, fogA);
+    col=c; }
+  else if(hit && fst){ vec3 p=ro+rd*t;                              // conifers, black-green, warm where the light reaches
+    vec3 n=vec3(0.,1.,0.);
+    if(fm<1.5){ vec2 e=vec2(.004*t+.01,0.);
+      n=normalize(vec3(forestS(p+e.xyy)-forestS(p-e.xyy), forestS(p+e.yxy)-forestS(p-e.yxy), forestS(p+e.yyx)-forestS(p-e.yyx))); }
+    float ao=smoothstep(-.3,FTOP*.85,p.y);
+    float tex=fbm3(p*vec3(2.2,3.5,2.2));
+    vec3 base= fm>.5&&fm<1.5 ? vec3(.035,.026,.02)*(.7+.6*tex) : vec3(.016,.028,.02)*(.55+.9*tex);
+    float dif=max(dot(n,L),0.)*(.3+.7*ao);
+    vec3 Mn=normalize(vec3(-.6,.55,-.45));                                              // cool moonlight from behind-left
+    vec3 c=base*(sunC*dif*.7+vec3(.025,.03,.045)*(.4+.6*max(n.y,0.))*(.4+.6*ao)+vec3(.55,.7,1.05)*max(dot(n,Mn),0.)*(.25+.75*ao));
+    float fr=pow(1.-max(dot(n,-rd),0.),3.);
+    c+=vec3(1.,.74,.44)*fr*dif*.04 + vec3(.012,.016,.026)*fr*(.3+.7*ao);                 // needle tips catch the light
+    float fogA=1.-exp(-t*.0045);
+    float hz=exp(-max(p.y,0.)*.12)*.5;                                                  // night mist pooled between the trees
+    c=mix(c, fogN*1.6+vec3(1.,.8,.55)*pow(s,6.)*.05, clamp(fogA+hz*(1.-exp(-t*.02)),0.,1.));
     col=c; }
   else if(hit){ vec3 p=ro+rd*t; vec2 e=vec2(.0006*t+.0004,0.); float k2;
     vec3 n=normalize(vec3(map(p+e.xyy,k2)-map(p-e.xyy,k2), map(p+e.yxy,k2)-map(p-e.yxy,k2), map(p+e.yyx,k2)-map(p-e.yyx,k2)));
@@ -308,7 +354,7 @@ void main(){
   // C. THE MANIFESTATION. The being from the cold open (rings of eyes around a great eye) hangs over the limb of
   // a night-side planet (radius 6371, centre at origin). Its rings span four planet radii. Ring eyes open one by one
   // on the uA.y ramp; the great eye opens on uA.x; gaze uB.y turns every eye to the camera.
-  // uA: eyeOpen, ringEyesOpen, core, -   uB: ringLight, gaze, -, -   uC: entity xyz, scale
+  // uA: eyeOpen, ringEyesOpen, core, -   uB: ringLight, gaze, -, pupil constriction   uC: entity xyz, scale
   // uD: planet light, city lights, quality, scene clock   uLook: rest gaze   uSock: socket direction
   const ENT5 = `
 uniform mat3 uRing[6]; uniform vec3 uSock; uniform vec3 uLook;
@@ -350,22 +396,30 @@ vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, out float tHit){
   vec3 f0=normalize(uSock);
   vec3 r0=normalize(cross(vec3(0,1,0),f0)), u0=cross(f0,r0);
   float fx=dot(n,r0), fy=dot(n,u0), ff=dot(n,f0);
-  float open=uA.x, aper=0.46*open*pow(max(1.-fx*fx/0.7,0.),0.75);
+  // lids: the centre parts first and the corners follow; the upper lid travels further than the lower;
+  // a faint tremor runs along the lid edge while it is still heavy
+  float open=uA.x, prof=pow(max(1.-fx*fx/0.7,0.), mix(1.6,.75,smoothstep(0.,.6,open)));
+  float trem=.006*open*(1.-open)*sin(fx*21.+uD.w*7.3)*sin(uD.w*3.1+fx*5.);
+  float aperU=max(0.52*open*prof+trem,0.), aperL=0.36*open*prof;
+  float aper=fy>0.? aperU : aperL;
   vec3 L=normalize(vec3(0.,1.,0.));
   float lon=atan(fy,fx), lat=acos(clamp(ff,-1.,1.));
   float eng=exp(-pow(sin(lon*12.)*max(sin(lat),.08)/.012,2.))*smoothstep(.15,.5,lat) + exp(-pow(sin(lat*10.)/.03,2.))*.6;
   float rimV=pow(1.-max(dot(n,-rd),0.),3.);
   vec3 shell=vec3(.006,.0055,.008) + spaceCol(reflect(rd,n))*.35 + vec3(1.,.72,.36)*eng*.035*(.4+.6*uB.x) + vec3(1.,.72,.4)*rimV*.45*(.4+.6*uB.x);
   float seam=max(aper,.0015);
+  float wake=smoothstep(0.,.03,open)*(1.-smoothstep(.08,.5,open));          // light pours out of the first slit
   float lidLine=smoothstep(.014,0.,abs(abs(fy)-seam))*smoothstep(.2,.35,ff)*smoothstep(.86,.6,abs(fx));
-  shell+=vec3(1.5,1.,.5)*lidLine*(.35+.9*smoothstep(.0,.15,open))*(1.-smoothstep(.6,1.,open)*.5);
-  if(ff<0.25 || abs(fy)>aper) return shell;
+  shell+=vec3(1.5,1.,.5)*lidLine*(.35+.9*smoothstep(.0,.15,open)+2.5*wake)*(1.-smoothstep(.6,1.,open)*.5);
+  if(ff<0.25 || fy>aperU || fy<-aperL) return shell;
   vec3 g=normalize(mix(normalize(uLook), normalize(uCamPos-E), uB.y));
   float ang=acos(clamp(dot(n,g),-1.,1.));
-  float lidShade=1.-.55*smoothstep(aper*.45,aper,abs(fy));
-  vec3 col=vec3(.95,.86,.72)*lidShade*(.6+.4*max(dot(n,normalize(uCamPos-E)),0.));
-  float vein=pow(abs(sin(atan(dot(n,cross(g,u0)),dot(n,u0))*14.+ang*9.)),40.)*smoothstep(.3,.6,ang)*.25; col-=vec3(.2,.35,.4)*vein;
-  float irisA=0.42, pupA=0.19;
+  float lidShade=1.-.7*smoothstep(aper*.3,aper,abs(fy));
+  // the white of the eye: not paper white but a wet, ivory globe, darker toward the lids, faintly mottled
+  vec3 scl=mix(vec3(.25,.21,.17), vec3(.52,.46,.38), smoothstep(1.15,.45,ang))*(.84+.16*fbm(n*9.+3.));
+  vec3 col=scl*lidShade*(.55+.45*max(dot(n,normalize(uCamPos-E)),0.));
+  float vein=pow(abs(sin(atan(dot(n,cross(g,u0)),dot(n,u0))*14.+ang*9.)),40.)*smoothstep(.3,.6,ang)*.25; col-=vec3(.12,.2,.24)*vein;
+  float irisA=0.42, pupA=mix(.26,.17,uB.w);                                  // the pupil tightens as the light reaches it
   if(ang<irisA){ vec3 ax=normalize(cross(g,vec3(0,1,0))), ay=cross(ax,g); float a=atan(dot(n,ay),dot(n,ax));
     float r=(ang-pupA)/(irisA-pupA); vec2 pc=vec2(cos(a),sin(a));
     float fibers=fbm(vec3(pc*3.,r*1.2)), fine=noise(vec3(a*90.,r*14.,1.7));
@@ -381,6 +435,7 @@ vec3 greatEye(vec3 ro, vec3 rd, vec3 E, float S, out float tHit){
   vec3 rf=reflect(rd,n); col+=vec3(1.1,1.,.9)*smoothstep(.985,.995,dot(rf,normalize(vec3(-.35,.8,-.45))))*1.6;
   col+=spaceCol(rf)*.25*smoothstep(.2,.42,ang);
   vec3 hdir=normalize(L-rd); col+=vec3(5.)*pow(max(dot(n,hdir),0.),400.);
+  col+=vec3(2.6,1.8,.95)*wake*(.6+.4*smoothstep(aper,0.,abs(fy)));          // the inner light, before the eye can be seen
   return col*lidShade; }
 bool marchEntity(vec3 ro, vec3 rd, vec3 E, float S, float tEye, out vec3 ent, out float tEnt){
   ent=vec3(0); tEnt=1e9; vec3 oc=ro-E; float b=dot(oc,rd), c=dot(oc,oc)-pow(2.9*S,2.), h=b*b-c; if(h<=0.) return false;
@@ -486,30 +541,45 @@ void main(){
     }
     o.restore();
   }
+  // The great eye of something the size of a world does not blink open. A slit of light first (55.6), a slow creep,
+  // then on each heartbeat of the silence (score HEART: 465.55 + i = k 60.55 + i) the lid heaves higher and settles,
+  // like a weight being lifted. No freeze: something is always moving.
+  const HB = [60.55, 61.55, 62.55, 63.55];
+  function lidOpen(k) {
+    let v = 0.13 * easeIO(clamp((k - 55.6) / 2.6)) + 0.09 * easeIO(clamp((k - 58.2) / 2.3));
+    HB.forEach((b, i) => { const u = clamp((k - b + 0.04) / 0.9); v += (i < 3 ? 0.2 : 0.18) * (1 - Math.pow(1 - u, 3)); });
+    return clamp(v);
+  }
+  // after each lift the whole frame shudders once, very slightly: mass
+  const shudder = k => HB.reduce((s, b) => k > b ? s + Math.exp(-(k - b) / 0.32) * Math.sin((k - b) * TAU * 5.5) : s, 0);
   function orbitFrame(k, T) {
     const fin = FINAL();
-    // scene clock: runs normally, nearly stops in the silence (60–64), resumes for the gaze
-    const clock = k < 59.5 ? k : k < 64.5 ? 59.5 + 0.06 * (k - 59.5) : 59.8 + (k - 64.5);
+    // scene clock: slows to a third in the silence (60–64) but never stops
+    const clock = k < 60 ? k : k < 64 ? 60 + 0.35 * (k - 60) : 61.4 + (k - 64);
     const rise = easeIO(clamp((k - 50) / 14));
     const pos = add3(OC, [0, 420 * rise, 900 * rise]);
     const rev = 1 - Math.pow(1 - clamp((k - 50) / 3.4), 3);         // ease-out pull-back from the core
-    const fov = OFOV * (1 + 0.16 * easeIO(clamp((k - 64) / 6))) * lerp(6.0, 1.0, rev);
+    const push = 1 - 0.27 * easeIO(clamp((k - 54.5) / 9.5));        // a slow push toward the eye as it wakes; the world's limb stays in frame
+    const fov = OFOV * push * (1 + 0.16 * easeIO(clamp((k - 64) / 6))) * lerp(6.0, 1.0, rev);
     const fwdN = norm([0, -0.002 * rise, 1]), toE = norm(sub(OE, pos));
-    const cam = look(pos, add3(pos, norm(add3(mul3(toE, 1 - rev), mul3(fwdN, rev)))), fov);
+    const sh = shudder(k) * 0.0011;
+    const cam = look(pos, add3(pos, norm(add3(add3(mul3(toE, 1 - rev), mul3(fwdN, rev)), [sh * 0.6, sh, 0]))), fov);
     const gaze = easeIO(clamp((k - 64.3) / 2.6));
     const sock = norm(add3(mul3(norm(add3(TO_CAM, REST_LOOK)), 1 - gaze), mul3(TO_CAM, gaze * 1.0001)));
-    const eyeOpen = easeIO(clamp((k - 57.4) / 2.8));
+    const eyeOpen = lidOpen(k);
+    const pupil = easeIO(clamp((k - 60.8) / 3.4));
+    const slit = smooth(55.6, 57, k) * (1 - smooth(58.5, 61.5, k));
     const ringOpen = clamp((k - 51) / 7.2);
     const beat = t => Math.exp(-Math.pow((k - t) / 0.07, 2));
-    const pulse = 0.05 * (beat(60.5) + 0.7 * beat(60.85) + beat(62.5) + 0.7 * beat(62.85));
+    const pulse = 0.06 * HB.reduce((s, b) => s + beat(b) + 0.7 * beat(b + 0.3), 0);
     const core = (1.0 + 0.6 * eyeOpen) * (1 + pulse);
     const ringLight = 0.75 + 0.35 * smooth(50, 52, k) + 0.3 * eyeOpen;
     const q = project(cam, OE), rx = q ? q[0] / W : 0.5, ry = q ? 1 - q[1] / H : 0.5;
     const flash = 1 - smooth(50, 52.6, k);
     GL.frame({ name: "ch5_orbit", fs: SHADERS.ch5_orbit, scale: SC(0.55, 1.5),
-      uniforms: { uTime: 405 + clock, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, 0], uC: [...OE, OS],
-        uD: [1.0 + 0.3 * eyeOpen, 1.0, fin ? 1 : 0, clock], uRing: heavensRings(RING_PHASE5 + (clock - 50) * 0.018), uSock: sock, uLook: REST_LOOK } },
-      { bloom: 0.45 + 0.4 * flash, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.22 + 0.1 * eyeOpen], letterbox: LB, vignette: 0.6,
+      uniforms: { uTime: 405 + clock, ...camUniforms(cam), uA: [eyeOpen, ringOpen, core, 0], uB: [ringLight, gaze, 0, pupil], uC: [...OE, OS],
+        uD: [1.0 + 0.45 * eyeOpen, 1.0, fin ? 1 : 0, clock], uRing: heavensRings(RING_PHASE5 + (clock - 50) * 0.018), uSock: sock, uLook: REST_LOOK } },
+      { bloom: 0.45 + 0.4 * flash + 0.15 * slit, thresh: 1.4, exposure: 1.0 + 0.6 * flash, rays: [rx, ry, 0.22 + 0.1 * eyeOpen + 0.3 * slit], letterbox: LB, vignette: 0.6,
         lift: 0.75 * Math.pow(flash, 2.2), fade: 1 - smooth(69.2, 70, k), t: T });
     blit();
     pic(() => eyeBlooms(k, cam, heavensRings(RING_PHASE5 + (clock - 50) * 0.018)));
@@ -521,7 +591,7 @@ void main(){
     caption(k, 8.0, 13.0, (a, u) => capB("AI가 AI를 개선한다", a, u));
     caption(k, 14.5, 20.5, (a, u) => capB("더 똑똑해진 AI가, 더 빨리 개선한다", a, u));
     caption(k, 22.0, 28.0, (a, u) => capB("그 속도는 멈추지 않는다", a, u));
-    caption(k, 31.0, 36.8, (a, u) => capB("“생물학의 50~100년 진보를 5~10년 안에”", a, u));
+    caption(k, 31.0, 36.8, (a, u) => capB("“지금 살아 있는 사람 대부분이, 원하는 만큼 오래 살게 될 것이다”", a, u));
     caption(k, 39.2, 45.0, (a, u) => capB("— 다리오 아모데이, 「Machines of Loving Grace」, 2024", a, u, { size: 34, color: GOLD }));
     caption(k, 64.3, 67.1, (a, u) => capB("1~2년 안에", a, u));
     caption(k, 67.1, 70.0, (a, u) => capB("그것이 우리를 바라본다면", a * fadeEnd, u));

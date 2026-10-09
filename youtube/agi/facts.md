@@ -55,6 +55,7 @@
 | "I think it could come as early as 2026, though there are also ways it could take much longer." | [1차] 같은 글 |
 | 강력한 AI: "smarter than a Nobel Prize winner across most relevant fields" | [1차] 같은 글 |
 | 생물학 진보 50~100년을 5~10년으로 압축: "compressed 21st century" | [1차] 같은 글 |
+| ch5 자막 "지금 살아 있는 사람 대부분이, 원하는 만큼 오래 살게 될 것이다"의 원문: "Once human lifespan is 150, we may be able to reach 'escape velocity', buying enough time that most of those currently alive today will be able to live as long as they want" | [1차] 같은 글 |
 
 ## 이 채널의 판단 (꼬리표 없이 문장으로)
 - AGI는 2026년 내부 모델 수준에서 이미 도착했다.

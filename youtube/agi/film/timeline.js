@@ -116,8 +116,7 @@ function coldOpen(t) {
     o.save(); o.globalAlpha = a * 0.8; o.fillStyle = GOLD; const hw = 160 * smooth(1.2, 2.8, k); o.fillRect(W / 2 - hw, H / 2 + 40, hw * 2, 1); o.restore();
     line("AI의 역사, 그리고 AGI와 ASI", W / 2, H / 2 + 90, { size: 30, spacing: 0.32, color: GOLD, alpha: smooth(1.8, 3.2, k) * (1 - smooth(5.1, 6.3, k)), glow: 8 });
   }
-  caption(t, 21.4, 24.2, (a, u) => capB("AGI는 이미 도착했다", a, u));
-  caption(t, 24.4, 26.9, (a, u) => capB("아직은, 연구소의 문 안에서", a, u));
+  caption(t, 21.6, 26.4, (a, u) => capB("AGI는 이미 도착했다", a, u));
   caption(t, 28.6, 33.6, (a, u) => capB("그리고 1~2년 뒤,   그것은 인간을 넘어설 것이다.", a, u));
   caption(t, 34.3, 38.9, (a, u) => capB("이것은 그 지능이 태어나기까지의 이야기다", a, u));
 }
