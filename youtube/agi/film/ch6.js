@@ -312,11 +312,11 @@ void main(){
     else if (k < 27.4) { wide(k, TT); close(k, TT, ease((k - 26.2) / 1.2)); }
     else close(k, TT);
     chapterCard(k, "VI", "누가 만드는가", 5);
-    caption(k, 5.6, 10.0, (a, u) => capB("OpenAI — “AGI가 인류 전체에 이롭도록”", a, u));
-    caption(k, 10.2, 16.9, (a, u) => capB("Anthropic — “신뢰할 수 있고, 해석할 수 있고, 조종할 수 있는 AI”", a, u));
+    caption(k, 5.6, 10.0, (a, u) => capB("*OpenAI* — “AGI가 인류 전체에 이롭도록”", a, u));
+    caption(k, 10.2, 16.9, (a, u) => capB("*Anthropic* — “신뢰할 수 있고, 해석할 수 있고, 조종할 수 있는 AI”", a, u));
     caption(k, 17.6, 21.6, (a, u) => capB("Machines of Loving Grace", a, u, { font: "CormI", size: 54, spacing: 0.06 - 0.03 * ease(u * 2), color: "#f6ead2" }));
-    caption(k, 21.8, 25.0, (a, u) => capB("“데이터센터 안의 천재들의 나라”", a, u));
-    caption(k, 25.2, 28.5, (a, u) => capB("“그것은 2026년에 올 수도 있다”", a, u));
+    caption(k, 21.8, 25.0, (a, u) => capB("“데이터센터 안의 *천재들의 나라*”", a, u));
+    caption(k, 25.2, 28.5, (a, u) => capB("“그것은 *2026년*에 올 수도 있다”", a, u));
     caption(k, 28.7, 31.6, (a, u) => capB("— 다리오 아모데이, 2024", a, u));
   }
 
@@ -332,18 +332,20 @@ void main(){
       sun: lerp(0.42, 0, smooth(10.8, 13.4, k)), sunEl: lerp(0.012, 0.004, night),
       ember: smooth(11.6, 14, k) * (0.85 + 0.15 * Math.sin((k - 14) * 2 * Math.PI / 7)), mask: smooth(11, 13, k),
     }, { lift: 1 - smooth(0, 2.6, k), rays: [0.5, 0.55, 0.25 * (1 - night)], fade: 1 - smooth(28, 30, k) });
-    caption(k, 0.8, 3.6, (a, u) => capB("최초의 초지능 기계는", a, u));
-    caption(k, 3.8, 7.0, (a, u) => capB("인간이 만들 필요가 있는 마지막 발명이다", a, u));
+    caption(k, 0.8, 3.6, (a, u) => capB("최초의 *초지능 기계*는", a, u));
+    caption(k, 3.8, 7.0, (a, u) => capB("인간이 만들 필요가 있는 *마지막 발명*이다", a, u));
     caption(k, 7.2, 12.4, (a, u) => capB("— 그 기계가 자신을 통제하는 법을 우리에게 알려줄 만큼 온순하다면", a, u));
     caption(k, 8.4, 12.4, (a, u) => capT("I. J. 굿, 1965", a, u));
     const f = 1 - smooth(28, 30, k);
     const qa = smooth(13.2, 15.0, k) * f;
-    if (qa > 0) {
-      line("당신은 누가 먼저 도달한다고 보나요?", W / 2, BAR + 98, { size: 54, spacing: 0.2 - 0.05 * ease((k - 13.2) / 5), alpha: qa, glow: 14, blur: (1 - qa) * 5 });
-      o.save(); o.globalAlpha = qa * 0.6; o.fillStyle = GOLD; const hw = 70 * smooth(14, 16, k); o.fillRect(W / 2 - hw, BAR + 152, hw * 2, 1); o.restore();
+    if (qa > 0 && !window.NOCAP) {                                       // the question, big, over the end screen
+      const saved = CAP; CAP = { t: k, t0: 13.2, t1: 30 };
+      o.save(); o.globalAlpha = f; typeset("당신은 *누가 먼저* 도달한다고 보나요?", { size: 78, y: 170, back: 0.6 }); o.restore();
+      CAP = saved;
+      o.save(); o.globalAlpha = qa * 0.7; o.fillStyle = GOLD; const hw = 120 * smooth(14, 16, k); o.fillRect(W / 2 - hw, 250, hw * 2, 2); o.restore();
     }
     const ta = smooth(14.4, 16.2, k) * f;
-    if (ta > 0) line("인류의 마지막 발명", W / 2, BAR / 2, { size: 24, color: GOLD, spacing: 0.55, alpha: ta, glow: 6 });
+    if (ta > 0 && !window.NOCAP) line("인류의 마지막 발명", W / 2, H - 64, { size: 30, color: GOLD, spacing: 0.45, alpha: ta, glow: 6 });
   }
 
   chapter("ch6", 35, fn6);

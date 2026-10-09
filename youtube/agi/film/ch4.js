@@ -30,14 +30,7 @@
     return (2 * u3 - 3 * u2 + 1) * vs[i] + (u3 - 2 * u2 + u) * h * m[i] + (-2 * u3 + 3 * u2) * vs[i + 1] + (u3 - u2) * h * m[i + 1];
   }
   const camLook = (pos, at, fov, up = [0, 1, 0]) => ({ pos, fwd: norm(sub(at, pos)), up, fov });
-  const small = (s, a, y = H - 24) => line(s, W / 2, y, { size: 19, color: "rgba(244,241,234,0.62)", alpha: a, spacing: 0.22, glow: 4 });
-  // a bottom caption with a smaller aside inside the same line (e.g. a currency conversion); parts = [[text, size, color?], ...]
-  const capMix = (parts, a, u) => {
-    const sp = 0.2 - 0.06 * ease(u * 2), y = H - BAR / 2;
-    o.save(); const ws = parts.map(([s, size]) => { o.font = `${size}px "SerifL"`; o.letterSpacing = `${sp * size}px`; return o.measureText(s).width; }); o.restore();
-    let x = W / 2 - ws.reduce((t, w) => t + w, 0) / 2;
-    parts.forEach(([s, size, color = STAR], i) => { line(s, x, y + (size < 40 ? 3 : 0), { size, color, glow: size < 40 ? 4 : 8, alpha: a, spacing: sp, blur: (1 - a) * 4, align: "left" }); x += ws[i]; });
-  };
+  const small = (s, a) => capSmall(s, a);                 // a footnote in the new type (timeline.js)
 
   // ---------- shared GLSL
   const H4 = `
@@ -1057,35 +1050,35 @@ void main(){ vec3 ro=uCamPos, rd=camRay(gl_FragCoord.xy);
   const spiralNext = (k, T) => window.CH5_SPIRAL ? window.CH5_SPIRAL(k - 102, T) : drawSpiral(k, T);
   function captions(k) {
     chapterCard(k, "IV", "문턱");
-    caption(k, 8.8, 13.4, (a, u) => capB("2023 — 변호사 시험 상위 10%", a, u));
-    caption(k, 13.8, 18.4, (a, u) => capB("2024 — 생각하는 법을 배우다", a, u));
-    caption(k, 18.8, 22.4, (a, u) => capB("2025 — 국제수학올림피아드 금메달", a, u));
+    caption(k, 8.8, 13.4, (a, u) => capB("2023 — 변호사 시험 *상위 10%*", a, u));
+    caption(k, 13.8, 18.4, (a, u) => capB("2024 — *생각하는 법*을 배우다", a, u));
+    caption(k, 18.8, 22.4, (a, u) => capB("2025 — 국제수학올림피아드 *금메달*", a, u));
     caption(k, 22.8, 39.6, (a, u) => capT("2026년 4월 · Anthropic", a, u));
-    caption(k, 23.2, 26.8, (a, u) => capB("새 모델을 세상에 공개하지 않았다", a, u));
-    caption(k, 27.2, 31.9, (a, u) => capB("그 모델은 27년 동안 아무도 못 찾은 결함을 찾아냈다", a, u));
+    caption(k, 23.2, 26.8, (a, u) => capB("새 모델을 세상에 *공개하지 않았다*", a, u));
+    caption(k, 27.2, 31.9, (a, u) => capB("그 모델은 *27년* 동안 아무도 못 찾은 결함을 찾아냈다", a, u));
     caption(k, 32.3, 35.5, (a, u) => capB("소프트웨어의 허점을 찾는 일에서", a, u));
-    caption(k, 35.9, 39.9, (a, u) => capB("극소수의 최고 전문가를 빼면, 어떤 인간보다 뛰어났다", a, u));
+    caption(k, 35.9, 39.9, (a, u) => capB("극소수의 최고 전문가를 빼면, *어떤 인간보다* 뛰어났다", a, u));
     caption(k, 40.6, 49.6, (a, u) => capT("2026년 5월 · OpenAI", a, u));
-    caption(k, 41.0, 45.5, (a, u) => capB("80년 동안 풀리지 않던 에르되시의 추측", a, u));
-    caption(k, 46.0, 49.6, (a, u) => capB("AI가 반증했다", a, u));
+    caption(k, 41.0, 45.5, (a, u) => capB("*80년* 동안 풀리지 않던 에르되시의 추측", a, u));
+    caption(k, 46.0, 49.6, (a, u) => capB("*AI*가 반증했다", a, u, { slam: true }));
     caption(k, 50.5, 59.7, (a, u) => capT("2026년 8월 · 아스트라", a, u));
-    caption(k, 49.7, 51.8, (a, u) => capB("이게 끝일까?", a, u));
-    caption(k, 52.0, 56.8, (a, u) => capB("10년 넘게 풀리지 않던 난제 열 개", a, u));
-    caption(k, 57.3, 60.2, (a, u) => capB("한꺼번에", a, u));
+    caption(k, 49.7, 51.8, (a, u) => capB("이게 *끝*일까?", a, u, { slam: true }));
+    caption(k, 52.0, 56.8, (a, u) => capB("10년 넘게 풀리지 않던 *난제 열 개*", a, u));
+    caption(k, 57.3, 60.2, (a, u) => capB("*한꺼번에*", a, u, { slam: true }));
     caption(k, 60.6, 68.7, (a, u) => capT("2026년 9월 6일", a, u));
-    caption(k, 63.6, 68.0, (a, u) => capB("수능 전 과목 만점", a, u));
+    caption(k, 63.6, 68.0, (a, u) => capB("수능 *전 과목 만점*", a, u, { slam: true, size: 150, y: H * 0.27 }));
     caption(k, 64.6, 68.7, (a) => small("수능 문제 기반 비공식 AI 평가", a));
     caption(k, 69.8, 82.6, (a, u) => capT("2026년 9월 8일 · OpenAI", a, u));
-    caption(k, 70.2, 73.3, (a, u) => capMix([["상금 100만 달러", 40], [" (약 13억 원)", 25, "rgba(244,241,234,0.62)"], [", 7대 밀레니엄 난제", 40]], a, u));   // 1 USD ≈ 1,342 KRW (2026-10-09)
-    caption(k, 73.6, 76.6, (a, u) => capB("나비에–스토크스 방정식", a, u));
-    caption(k, 77.2, 81.8, (a, u) => capB("공개되지 않은 모델이 88시간 만에 풀었다고 발표했다", a, u));
+    caption(k, 70.2, 73.3, (a, u) => capB("상금 *100만 달러* ~(약 13억 원)~, 7대 밀레니엄 난제", a, u));   // 1 USD ≈ 1,342 KRW (2026-10-09)
+    caption(k, 73.6, 76.6, (a, u) => capB("*나비에–스토크스* 방정식", a, u, { slam: true, size: 140 }));
+    caption(k, 77.2, 81.8, (a, u) => capB("공개되지 않은 모델이 *88시간* 만에 풀었다고 발표했다", a, u));
     caption(k, 78.4, 82.6, (a) => small("수학계 검증 진행 중", a));
-    caption(k, 82.8, 85.8, (a, u) => capB("연구소 깊은 곳에서는, 지금 무엇이 풀리고 있을까", a, u));
-    caption(k, 86.0, 88.5, (a, u) => line("이것은 현실이다", W / 2, H / 2, { size: 76, spacing: 0.3 - 0.08 * ease(u * 1.5), alpha: a, glow: 26, blur: (1 - a) * 6 }));
-    caption(k, 88.7, 91.4, (a, u) => capB("우리는 이것을 AGI라고 본다", a, u));
-    caption(k, 91.6, 94.2, (a, u) => capB("문턱은 이미 넘었다", a, u));
+    caption(k, 82.8, 85.8, (a, u) => capB("연구소 깊은 곳에서는, 지금 *무엇이* 풀리고 있을까", a, u));
+    caption(k, 86.0, 88.5, (a, u) => capB("이것은 *현실*이다", a, u, { slam: true, size: 210 }));
+    caption(k, 88.7, 91.4, (a, u) => capB("우리는 이것을 *AGI*라고 본다", a, u));
+    caption(k, 91.6, 94.2, (a, u) => capB("문턱은 *이미* 넘었다", a, u, { slam: true }));
     caption(k, 94.4, 97.8, (a, u) => capB("그리고 이제 연구소들은", a, u));
-    caption(k, 98.2, 101.9, (a, u) => capB("AI에게 AI 연구를 맡기기 시작했다", a, u));
+    caption(k, 98.2, 101.9, (a, u) => capB("*AI*에게 *AI 연구*를 맡기기 시작했다", a, u));
   }
   chapter("ch4", 102, (k, T) => {
     render(k, T);

@@ -729,19 +729,19 @@ void main(){
   // =====================================================================================================
   function captions(k) {
     const fadeEnd = 1 - smooth(69.2, 70, k);
-    caption(k, 8.0, 13.0, (a, u) => capB("AI가 AI를 개선한다", a, u));
-    caption(k, 14.5, 20.5, (a, u) => capB("더 똑똑해진 AI가, 더 빨리 개선한다", a, u));
-    caption(k, 22.0, 28.0, (a, u) => capB("그 속도는 멈추지 않는다", a, u));
-    caption(k, 31.0, 36.8, (a, u) => capB("“지금 살아 있는 사람 대부분이, 원하는 만큼 오래 살게 될 것이다”", a, u));
+    caption(k, 8.0, 13.0, (a, u) => capB("*AI*가 *AI*를 개선한다", a, u, { slam: true, size: 150 }));
+    caption(k, 14.5, 20.5, (a, u) => capB("더 똑똑해진 AI가, *더 빨리* 개선한다", a, u));
+    caption(k, 22.0, 28.0, (a, u) => capB("그 속도는 *멈추지 않는다*", a, u, { slam: true, size: 150 }));
+    caption(k, 31.0, 36.8, (a, u) => capB("“지금 살아 있는 사람 대부분이, *원하는 만큼 오래* 살게 될 것이다”", a, u));
     caption(k, 39.2, 45.0, (a, u) => capB("— 다리오 아모데이, 「Machines of Loving Grace」, 2024", a, u, { size: 34, color: GOLD }));
-    caption(k, 64.3, 67.1, (a, u) => capB("1~2년 안에", a, u));
-    caption(k, 67.1, 70.0, (a, u) => capB("그것이 우리를 바라본다면", a * fadeEnd, u));
+    caption(k, 64.3, 67.1, (a, u) => capB("*1~2년* 안에", a, u, { slam: true, y: H * 0.76, size: 160 }));
+    caption(k, 67.1, 70.0, (a, u) => capB("그것이 *우리를* 바라본다면", a * fadeEnd, u, { slam: true, y: H * 0.76, size: 130 }));
   }
-  function asiTitle(k) {
-    const a = smooth(50.9, 52.6, k) * (1 - smooth(56.6, 58.4, k));
-    if (a <= 0) return;
-    const u = clamp((k - 50.9) / 7.5), br = 0.5 + 0.5 * Math.sin((k - 50.9) * TAU / 4.2);
-    line("ASI", W / 2, H / 2, { size: 168, font: "Corm", color: STAR, spacing: 0.62 - 0.2 * ease(u), alpha: a * (0.9 + 0.1 * br), glow: 26 + 14 * br, blur: (1 - a) * 6 });
+  function asiTitle(k) {                                 // the name, huge, slammed onto the frame on the tutti
+    if (window.CLEAN || window.NOCAP || k < 50.6 || k > 58.4) return;
+    const saved = CAP; CAP = { t: k, t0: 50.6, t1: 58.4 };
+    typeset("*ASI*", { size: 330, y: H * 0.52, slam: true, track: 0.18, back: 0.55 });
+    CAP = saved;
   }
   chapter("ch5", 70, (k, T) => {
     if (k < 30.6) spiralFrame(k, T);                       // the spiral dissolves into the foot of the staircase

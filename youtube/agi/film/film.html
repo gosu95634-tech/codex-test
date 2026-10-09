@@ -5,6 +5,8 @@
 @font-face { font-family: "SerifM"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Medium.ttf); }
 @font-face { font-family: "SerifB"; src: url(../../claude-history/assets/fonts/NotoSerifKR-Bold.ttf); }
 @font-face { font-family: "SansL"; src: url(../../claude-history/assets/fonts/NotoSansKR-Light.ttf); }
+@font-face { font-family: "SansM"; src: url(../../claude-history/assets/fonts/NotoSansKR-Medium.ttf); }
+@font-face { font-family: "SansB"; src: url(../../claude-history/assets/fonts/NotoSansKR-Black.ttf); }
 @font-face { font-family: "Corm"; src: url(../../claude-history/assets/fonts/Cormorant-Regular.ttf); }
 @font-face { font-family: "CormI"; src: url(../../claude-history/assets/fonts/Cormorant-Italic.ttf); }
 @font-face { font-family: "CormSB"; src: url(../../claude-history/assets/fonts/Cormorant-SemiBold.ttf); }
@@ -24,6 +26,6 @@ html, body { margin: 0; background: #000; } canvas { display: block; }
 </script>
 <script src="master.js"></script>
 <script>
-window.ready = async () => { await Promise.all(["SerifL", "SerifM", "SerifB", "SansL", "Corm", "CormI", "CormSB"].map(f => document.fonts.load(`40px "${f}"`, "가A"))); return { fonts: [...document.fonts].filter(f => f.status === "loaded").length, hdr: GL.hdr, renderer: GL.renderer }; };
+window.ready = async () => { await Promise.all(["SerifL", "SerifM", "SerifB", "SansL", "SansM", "SansB", "Corm", "CormI", "CormSB"].map(f => document.fonts.load(`40px "${f}"`, "가A"))); return { fonts: [...document.fonts].filter(f => f.status === "loaded").length, hdr: GL.hdr, renderer: GL.renderer }; };
 </script>
 </body></html>

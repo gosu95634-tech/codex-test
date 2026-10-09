@@ -1,19 +1,107 @@
 // 「인류의 마지막 발명」 timeline: renderFrame(t) composes the WebGL scene and the caption layer for time t (seconds).
-const LB = 0.128, BAR = Math.round(H * LB);
+// No letterbox: the picture fills the frame and the words are set into it.
+const LB = 0, BAR = 0;
 const smooth = (a, b, x) => { const u = clamp((x - a) / (b - a)); return u * u * (3 - 2 * u); };
 const easeIO = u => ease(u);
 const CAMF = (pos, at, fov = 1.3) => ({ pos, fwd: norm(sub(at, pos)), up: [0, 1, 0], fov });
 const camUniforms = c => ({ uCamPos: c.pos, uCamFwd: c.fwd, uCamUp: c.up, uFov: c.fov });
 
-// Caption with breath: fades and sharpens in, tracking tightens, then dissolves.
+// ---------- type. Captions are not subtitles in a bar: they are big words set into the picture in a heavy sans, the
+// important ones in gold, each word landing on its own beat. Markup in caption strings: *gold*, ~small aside~.
+let CAP = { t: 0, t0: 0, t1: 1 };                                          // the caption being drawn: now, start, end
 function caption(t, t0, t1, draw) {
-  if (window.CLEAN || t < t0 - 0.01 || t > t1) return;
-  const a = smooth(t0, t0 + 0.9, t) * (1 - smooth(t1 - 0.9, t1, t));
-  const u = clamp((t - t0) / (t1 - t0));
-  draw(a, u);
+  if (window.CLEAN || window.NOCAP || t < t0 - 0.01 || t > t1) return;
+  const a = smooth(t0, t0 + 0.3, t) * (1 - smooth(t1 - 0.32, t1, t));
+  CAP = { t, t0, t1 };
+  draw(a, clamp((t - t0) / (t1 - t0)));
 }
-const capB = (s, a, u, o2 = {}) => line(s, W / 2, H - BAR / 2, { size: 40, glow: 8, alpha: a, spacing: 0.2 - 0.06 * ease(u * 2), blur: (1 - a) * 4, ...o2 });
-const capT = (s, a, u, o2 = {}) => line(s, W / 2, BAR / 2, { size: 26, color: GOLD, glow: 6, alpha: a, spacing: 0.6 - 0.1 * ease(u * 2), blur: (1 - a) * 3, ...o2 });
+const easeOut3 = u => 1 - Math.pow(1 - clamp(u), 3);
+const easeBack = u => { u = clamp(u); return 1 + 2.6 * Math.pow(u - 1, 3) + 1.6 * Math.pow(u - 1, 2); };
+function parseType(s) {                                                    // -> [{t, em, sm} | {sp}]
+  const out = [];
+  for (const part of s.split(/(\*[^*]+\*|~[^~]+~)/)) {
+    if (!part) continue;
+    const em = part.length > 2 && part[0] === "*" && part.endsWith("*"), sm = part.length > 2 && part[0] === "~" && part.endsWith("~");
+    if (sm) { out.push({ t: part.slice(1, -1), em: false, sm: true }); continue; }   // an aside never breaks across lines
+    for (const w of (em ? part.slice(1, -1) : part).split(/(\s+)/)) if (w) out.push(/^\s+$/.test(w) ? { sp: true } : { t: w, em, sm: false });
+  }
+  return out;
+}
+// Lay out and animate one block of type. st: { size, y, x (left edge, else centred), font, color, maxW, slam, track, back }
+function typeset(s, st = {}) {
+  const font = st.font || "SansB", maxW = st.maxW || W * 0.86, track = st.track ?? -0.02, toks = parseType(s);
+  let size = st.size || 92;
+  const fam = tk => tk.sm ? "SansM" : font, px = tk => Math.round(tk.sm ? size * 0.46 : size);
+  const meas = () => { for (const tk of toks) { if (tk.sp) { tk.w = size * 0.28; continue; }
+    o.font = `${px(tk)}px "${fam(tk)}"`; o.letterSpacing = `${track * px(tk)}px`; tk.w = o.measureText(tk.t).width; } };
+  o.save(); meas();
+  const lw = ln => ln.reduce((v, tk) => v + tk.w, 0);
+  let lines = [toks];
+  if (lw(toks) > maxW || st.lines === 2) {                                 // one break, at the space that best balances the two lines
+    let best = null; const total = lw(toks);
+    toks.forEach((tk, i) => { if (!tk.sp) return; const w1 = lw(toks.slice(0, i)), m = Math.max(w1, total - w1 - tk.w); if (!best || m < best.m) best = { i, m }; });
+    if (best) lines = [toks.slice(0, best.i), toks.slice(best.i + 1)];
+  }
+  const widest = Math.max(...lines.map(lw)); if (widest > maxW) { size *= maxW / widest; meas(); }
+  const lineH = size * 1.16, cy = st.y ?? H * 0.8, y0 = cy - (lines.length - 1) * lineH / 2, cx = st.x ?? W / 2;
+  const wMax = Math.max(...lines.map(lw));
+  // a soft darkening behind the words: they sit in the picture, not on a bar
+  const fadeAll = 1 - clamp((CAP.t - (CAP.t1 - 0.3)) / 0.3), inAll = clamp((CAP.t - CAP.t0) / 0.3);
+  if ((st.back ?? 1) > 0) {
+    o.save(); o.translate(st.x != null ? cx + wMax / 2 : cx, cy); o.scale((wMax + size * 1.6) / 2, (lines.length * lineH + size * 1.1) / 2);
+    const g = o.createRadialGradient(0, 0, 0, 0, 0, 1); g.addColorStop(0, "rgba(0,0,0,0.5)"); g.addColorStop(.6, "rgba(0,0,0,0.3)"); g.addColorStop(1, "rgba(0,0,0,0)");
+    o.globalAlpha = (st.back ?? 1) * inAll * fadeAll; o.fillStyle = g; o.beginPath(); o.arc(0, 0, 1, 0, 7); o.fill(); o.restore();
+  }
+  const words = toks.filter(tk => !tk.sp).length, stagger = Math.min(st.slam ? 0.09 : 0.06, 0.45 / Math.max(words - 1, 1));
+  let wi = 0;
+  lines.forEach((ln, li) => {
+    let x = st.x != null ? cx : cx - lw(ln) / 2; const y = y0 + li * lineH;
+    for (const tk of ln) {
+      if (tk.sp) { x += tk.w; continue; }
+      const p = clamp((CAP.t - CAP.t0 - wi * stagger) / (st.slam ? 0.42 : 0.34)), q = clamp((CAP.t - (CAP.t1 - 0.3)) / 0.3);
+      const e = easeOut3(p), sc = (st.slam ? lerp(1.7, 1, easeBack(p)) : lerp(1.35, 1, e)) * (1 + 0.07 * easeOut3(q));
+      const al = clamp(p * 1.8) * (1 - q); wi++;
+      if (al > 0.002) {
+        const fs = px(tk), wx = x + tk.w / 2, wy = y + (tk.sm ? size * 0.12 : 0) + (1 - e) * size * 0.22;
+        o.save(); o.globalAlpha = al; o.translate(wx, wy); o.scale(sc, sc); o.translate(-tk.w / 2, 0);
+        const bl = (1 - p) * 9 + q * 6; if (bl > 0.4) o.filter = `blur(${bl.toFixed(1)}px)`;
+        o.font = `${fs}px "${fam(tk)}"`; o.letterSpacing = `${track * fs}px`; o.textBaseline = "middle"; o.textAlign = "left";
+        o.lineJoin = "round"; o.shadowColor = "rgba(0,0,0,0.85)"; o.shadowBlur = fs * 0.32; o.shadowOffsetY = fs * 0.05;
+        o.lineWidth = fs * 0.08; o.strokeStyle = "rgba(0,0,0,0.6)"; o.strokeText(tk.t, 0, 0);
+        if (tk.em) { const gr = o.createLinearGradient(0, -fs * 0.5, 0, fs * 0.5); gr.addColorStop(0, "#fff0b8"); gr.addColorStop(0.55, "#ffc75a"); gr.addColorStop(1, "#f29a2c");
+          o.shadowColor = "rgba(255,165,40,0.6)"; o.shadowBlur = fs * 0.45; o.shadowOffsetY = 0; o.fillStyle = gr; o.fillText(tk.t, 0, 0); }
+        else { o.shadowColor = "transparent"; o.fillStyle = tk.sm ? "rgba(244,241,234,0.8)" : (st.color || "#ffffff"); o.fillText(tk.t, 0, 0); }
+        if (tk.em) { o.shadowColor = "transparent"; o.fillText(tk.t, 0, 0); }
+        o.restore();
+      }
+      x += tk.w;
+    }
+  });
+  o.restore();
+}
+// The caption kinds every chapter uses. capB: the line itself (o2.slam: a short blow, huge, mid-frame; o2.y moves it).
+// Quotes run a little smaller; attributions ("— ...") are set in gold medium weight; o2.font keeps a display face.
+function capB(s, a, u, o2 = {}) {
+  if (a <= 0) return;
+  if (o2.slam) return typeset(s, { size: o2.size || 170, y: o2.y ?? H * 0.5, slam: true, maxW: W * 0.9, back: 0.8 });
+  if (s.startsWith("—") || (o2.size && o2.size < 40)) return typeset(s, { size: 62, y: o2.y ?? H * 0.84, color: "#ffd98a", track: 0, back: 0.85 });
+  if (o2.font) return typeset(s, { size: 104, y: o2.y ?? H * 0.8, font: o2.font, color: o2.color || "#f6ead2", track: 0 });
+  return typeset(s, { size: s.startsWith("“") ? 82 : 94, y: o2.y ?? H * 0.8 });
+}
+// capT: the when and where, a gold kicker set top left with a bar that wipes in.
+function capT(s, a, u, o2 = {}) {
+  if (a <= 0) return;
+  const p = easeOut3((CAP.t - CAP.t0) / 0.45), q = clamp((CAP.t - (CAP.t1 - 0.35)) / 0.35), al = p * (1 - q);
+  const x = 136 - (1 - p) * 46, y = H * 0.12, fs = o2.size || 66;
+  o.save(); o.globalAlpha = al; o.font = `${fs}px "SansB"`; o.letterSpacing = `${fs * 0.03}px`; o.textBaseline = "middle"; o.textAlign = "left";
+  o.shadowColor = "rgba(0,0,0,0.85)"; o.shadowBlur = fs * 0.4;
+  o.fillStyle = "#ffc75a"; o.fillRect(x - 30, y - fs * 0.5, 9, fs * smooth(0, 1, p));
+  o.lineJoin = "round"; o.lineWidth = fs * 0.08; o.strokeStyle = "rgba(0,0,0,0.6)"; o.strokeText(s, x, y);
+  o.shadowColor = "transparent"; o.fillStyle = "#ffd98a"; o.fillText(s, x, y);
+  o.restore();
+}
+// a footnote under the line (disclaimers)
+function capSmall(s, a, y = H * 0.915) { if (a > 0) typeset(s, { size: 46, y, color: "rgba(255,248,236,0.92)", track: 0, back: 0.9 }); }
 
 // Ring orientations for SHADERS.heavens, column-major mat3 x6 (matches rx*ry*rz in the old GLSL ringM).
 function heavensRings(spin) {
@@ -36,14 +124,18 @@ function blit() { o.drawImage(GL.canvas, 0, 0); }
 // Chapters register themselves; master.js lays them end to end. fn(k, T): k = seconds into the chapter, T = film time.
 const CHAPTERS = {};
 function chapter(id, len, fn) { CHAPTERS[id] = { len, fn }; }
-// Chapter title card, identical in every chapter: Roman numeral, hairline, Korean title. k = seconds since the card began.
+// Chapter title card, identical in every chapter: Roman numeral in gold, a hairline, the title in heavy type landing hard.
+// k = seconds since the card began.
 function chapterCard(k, numeral, title, dur = 6) {
-  const a = smooth(0.4, 1.8, k) * (1 - smooth(dur - 1.3, dur - 0.2, k));
+  if (window.NOCAP) return;
+  const a = smooth(0.15, 0.7, k) * (1 - smooth(dur - 0.8, dur - 0.1, k));
   if (a <= 0) return;
   const u = clamp(k / dur);
-  line(numeral, W / 2, H / 2 - 62, { size: 84, font: "Corm", color: GOLD, spacing: 0.5 - 0.12 * ease(u * 1.4), alpha: a, glow: 22, blur: (1 - a) * 5 });
-  o.save(); o.globalAlpha = a * 0.7; o.fillStyle = GOLD; const hw = 120 * smooth(0.9, 2.6, k); o.fillRect(W / 2 - hw, H / 2 - 4, hw * 2, 1); o.restore();
-  line(title, W / 2, H / 2 + 52, { size: 46, spacing: 0.34 - 0.08 * ease(u * 1.4), alpha: a * smooth(0.9, 2.3, k) / Math.max(smooth(0.4, 1.8, k), 1e-3), glow: 14, blur: (1 - a) * 4 });
+  line(numeral, W / 2, H / 2 - 132, { size: 112, font: "Corm", color: GOLD, spacing: 0.5 - 0.12 * ease(u * 1.4), alpha: a, glow: 26, blur: (1 - a) * 5 });
+  o.save(); o.globalAlpha = a * 0.85; o.fillStyle = GOLD; const hw = 230 * smooth(0.4, 1.4, k); o.fillRect(W / 2 - hw, H / 2 - 62, hw * 2, 2); o.restore();
+  const saved = CAP; CAP = { t: k, t0: 0.45, t1: dur - 0.1 };
+  typeset(title, { size: 196, y: H / 2 + 70, slam: true, maxW: W * 0.88, back: 0.75 });
+  CAP = saved;
 }
 // ---------- cold open (0–47 s): rise through the clouds, the eye descends and fills the frame, then the people below
 const CLOUD = [1300, 2300];
@@ -76,13 +168,56 @@ function worldFrame(t, cam, o2) {
     { bloom: o2.bloom ?? 0.5, thresh: 1.3, exposure: o2.exposure ?? 1.0, rays: [rx, ry, q ? (o2.rays ?? 0.3) : 0], letterbox: window.CLEAN ? 0 : LB, vignette: 0.6, lift: o2.lift ?? 0, fade: o2.fade ?? 1, t });
   blit();
 }
+// ---------- 0–14 s: the hook. The answer before the question: its eye. Then Turing's question, 76 years, and the answers
+// landing one per flute note of the score (6.1–10.6), each a flash cut to the scene where the film tells it. Then "what
+// next?" as we burst up through the clouds into the sky where it waits (14 s, the being's chord).
+// [t0, t1, chapter, its k at t0, playback speed, small line above, the line]
+const HOOK = [
+  [0.00, 0.90, "ch5", 67.2, 0.5, "", ""],
+  [0.90, 2.60, "ch2", 12.6, 0.8, "1950 · 앨런 튜링", "기계는 *생각*할 수 있는가?"],
+  [2.60, 4.30, "ch5", 21.0, 1.6, "", "*76년* 뒤"],
+  [4.30, 6.10, "ch4", 31.2, 0.9, "", "기계가 *답했다*"],
+  [6.10, 6.65, "ch2", 70.5, 1.6, "1997", "*체스*"],
+  [6.65, 7.20, "ch3", 36.1, 1.6, "2016", "*바둑*"],
+  [7.20, 7.75, "ch3", 89.4, 1.6, "2022", "*대화*"],
+  [7.75, 8.30, "ch4", 10.5, 1.6, "2023", "*변호사 시험*"],
+  [8.30, 8.80, "ch4", 20.1, 1.6, "2025", "*수학 올림피아드*"],
+  [8.80, 9.35, "ch4", 29.5, 1.6, "2026", "*27년 된 결함*"],
+  [9.35, 9.95, "ch4", 47.0, 1.6, "2026", "*80년 난제*"],
+  [9.95, 10.60, "ch4", 64.4, 1.6, "2026", "*수능 만점*"],
+  [10.60, 11.30, "ch4", 75.7, 1.2, "2026", "*밀레니엄 난제*"],
+];
+const CH_START = { ch1: 47, ch2: 113, ch3: 203, ch4: 303, ch5: 405, ch6: 475 };
+// draw another chapter's frame at its own k, without its captions, scaled about the centre (a cut's punch-in)
+function borrow(id, k, zoom) {
+  const c = CHAPTERS[id]; if (!c) return false;
+  const was = window.NOCAP; window.NOCAP = true;
+  o.save(); o.translate(W / 2, H / 2); o.scale(zoom, zoom); o.translate(-W / 2, -H / 2);
+  c.fn(k, CH_START[id] + k);
+  o.restore(); window.NOCAP = was; return true;
+}
+function hook(t) {
+  const i = HOOK.findIndex(h => t >= h[0] && t < h[1]); if (i < 0) return;
+  const [t0, t1, id, k0, sp, kick, words] = HOOK[i], dt = t - t0;
+  const zoom = 1 + 0.08 * Math.exp(-dt / 0.22) + 0.035 * dt / (t1 - t0);          // every cut punches in, then keeps creeping
+  if (!borrow(id, k0 + dt * sp, zoom)) { o.fillStyle = "#000"; o.fillRect(0, 0, W, H); }
+  if (i > 0) { o.save(); o.globalAlpha = 0.55 * Math.exp(-dt / 0.08); o.fillStyle = "#fff8ec"; o.fillRect(0, 0, W, H); o.restore(); }   // the cut flashes
+  if (window.CLEAN) return;
+  const saved = CAP, montage = i >= 4;
+  CAP = { t, t0: t0 - (montage ? 0.12 : 0), t1: t1 + (montage ? 0.3 : 0) };        // montage words are already landing at the cut
+  if (kick) typeset(kick, { size: montage ? 64 : 54, y: montage ? H * 0.5 - 150 : H * 0.5 - 265, font: "SansB", color: "#ffe2a0", track: 0.12, back: 0 });
+  if (words) typeset(words, { size: montage ? 200 : 168, y: H * 0.5 + (montage ? 20 : 30), slam: true, maxW: W * 0.88, back: 0.85 });
+  CAP = saved;
+}
 function coldOpen(t) {
-  if (t < 14) { // A. the long rise: valley floor, up through the cloud deck, out under the stars; a wrong star burns far above
-    const y = keys([[0, 30], [3.5, 380], [6, 1250], [9, 2350], [11.5, 2800], [14, 2900]], t);
-    const pos = [lerp(-140, 0, easeIO(t / 14)), y, lerp(-2600, -1200, easeIO(t / 14))];
-    const pitch = keys([[0, 0.09], [4, 0.15], [6.5, 0.2], [9.5, 0.1], [12, -0.13], [14, -0.18]], t);   // out of the cloud: look down at the sea we left
-    worldFrame(t, pitchCam(pos, pitch, 0, 1.25), { E: E_SKY, open: 0, ringOpen: 0, core: 1.3 + 0.4 * smooth(9, 14, t), ground: 0.75, gaze: 0, sock: SOCK_DOWN,
-      rays: 0.2, exposure: 1.15 - 0.15 * smooth(8, 12, t), fade: smooth(0, 3, t), haze: 1 });
+  if (t < 11.3) hook(t);
+  else if (t < 14) { // A. we burst up through the cloud deck, out under the stars, toward the light that waits above
+    const u = (t - 11.3) / 2.7, y = keys([[0, 1250], [0.45, 2350], [0.8, 2800], [1, 2900]], u);
+    const pos = [0, y, lerp(-1700, -1200, easeIO(u))];
+    const pitch = keys([[0, 0.25], [0.5, 0.12], [0.85, -0.12], [1, -0.18]], u);   // out of the cloud: look down at the sea we left
+    worldFrame(t, pitchCam(pos, pitch, 0, 1.25), { E: E_SKY, open: 0, ringOpen: 0, core: 1.5 + 0.4 * u, ground: 0.75, gaze: 0, sock: SOCK_DOWN,
+      rays: 0.2, exposure: 1.0 + 0.3 * Math.exp(-(t - 11.3) / 0.25), fade: 1, haze: 1 });
+    caption(t, 11.4, 13.85, (a, u2) => capB("*그다음은?*", a, u2, { slam: true }));
   } else if (t < 27) { // B. we fly up toward it; it enters from the top of the frame, opens its eye, finds us; we fall into the pupil
     const k = t - 14, E = E_SKY;
     const pos = flyPos(k);
@@ -111,14 +246,18 @@ function coldOpen(t) {
     GL.frame({ name: "space", fs: SHADERS.space, scale: 0.5, uniforms: { uTime: t, ...camUniforms(cam), uA: [0, 0.0, 0.22 * (1 - smooth(0, 5, k)), 0] } },
       { bloom: 0.6, thresh: 1.0, exposure: 0.8, rays: [0.5, 0.5, 0], letterbox: LB, vignette: 0.6, lift: 1 - smooth(0, 1.8, k), fade: 1 - smooth(5.3, 6.5, k), t });
     blit();
-    const a = smooth(0.8, 2.6, k) * (1 - smooth(5.1, 6.3, k));
-    line("인류의 마지막 발명", W / 2, H / 2 - 30, { size: 92, spacing: 0.3 - 0.06 * ease(k / 4), alpha: a, glow: 24, blur: (1 - a) * 6 });
-    o.save(); o.globalAlpha = a * 0.8; o.fillStyle = GOLD; const hw = 160 * smooth(1.2, 2.8, k); o.fillRect(W / 2 - hw, H / 2 + 40, hw * 2, 1); o.restore();
-    line("AI의 역사, 그리고 AGI와 ASI", W / 2, H / 2 + 90, { size: 30, spacing: 0.32, color: GOLD, alpha: smooth(1.8, 3.2, k) * (1 - smooth(5.1, 6.3, k)), glow: 8 });
+    if (!window.CLEAN) {                                                 // the title, in the type of the film
+      const saved = CAP; CAP = { t: k, t0: 0.5, t1: 6.2 };
+      typeset("인류의 *마지막 발명*", { size: 176, y: H / 2 - 40, slam: true, maxW: W * 0.9, back: 0.6 });
+      o.save(); o.globalAlpha = smooth(1.0, 1.8, k) * (1 - smooth(5.4, 6.2, k)) * 0.85; o.fillStyle = GOLD; const hw = 300 * smooth(1.0, 2.2, k); o.fillRect(W / 2 - hw, H / 2 + 78, hw * 2, 2); o.restore();
+      CAP = { t: k, t0: 1.5, t1: 6.2 };
+      typeset("AI의 과거와 현재, 그리고 미래", { size: 54, y: H / 2 + 150, font: "SansM", color: "#ffe2a0", track: 0.06, back: 0 });
+      CAP = saved;
+    }
   }
-  caption(t, 21.6, 26.4, (a, u) => capB("AGI는 이미 도착했다", a, u));
-  caption(t, 28.6, 33.6, (a, u) => capB("그리고 1~2년 뒤,   그것은 인간을 넘어설 것이다.", a, u));
-  caption(t, 34.3, 38.9, (a, u) => capB("이것은 그 지능이 태어나기까지의 이야기다", a, u));
+  caption(t, 21.6, 26.4, (a, u) => capB("AGI는 *이미 도착했다*", a, u, { slam: true, y: H * 0.74, size: 150 }));
+  caption(t, 28.6, 33.6, (a, u) => capB("그리고 *1~2년* 뒤, 그것은 *인간을 넘어설* 것이다", a, u));
+  caption(t, 34.3, 38.9, (a, u) => capB("이것은 그 지능이 *태어나기까지*의 이야기다", a, u));
 }
 const lerp3 = (a, b, u) => [lerp(a[0], b[0], u), lerp(a[1], b[1], u), lerp(a[2], b[2], u)];
 chapter("cold", 47, k => coldOpen(k));
